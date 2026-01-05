@@ -320,7 +320,6 @@ const BaseBlockContent = memo(function BaseBlockContent({
     block,
     isActive,
     status = 'idle',
-    message,
     onDelete,
     onDuplicate,
     onUpdate,
@@ -352,32 +351,6 @@ const BaseBlockContent = memo(function BaseBlockContent({
         failed: "border-rose-500/50 bg-zinc-950 shadow-[0_10px_40px_rgba(244,63,94,0.1)]"
     };
 
-    const StatusIndicator = ({ status }: { status: string }) => {
-        if (status === 'idle') return null;
-        
-        const labels: Record<string, string> = {
-            running: 'Analyzing',
-            success: 'Verified',
-            failed: 'Anomaly'
-        };
-
-        return (
-            <div className="flex flex-col items-end gap-1">
-                <div className="flex items-center gap-1.5 group-hover:translate-y-0.5 transition-all duration-300">
-                    <span className={"w-1.5 h-1.5 rounded-full animate-pulse " + 
-                        (status === 'running' ? 'bg-indigo-500 shadow-[0_0_8px_#6366f1]' : 
-                        status === 'success' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 
-                        'bg-rose-500 shadow-[0_0_8px_#f43f5e]')
-                    } />
-                    <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500">{labels[status] || status}</span>
-                </div>
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-1 scale-90 origin-right">
-                    <FileSearch className="w-2.5 h-2.5 text-zinc-600" />
-                    <span className="text-[7px] font-bold text-zinc-600 uppercase tracking-tighter">Inspect Evidence</span>
-                </div>
-            </div>
-        );
-    };
 
     const [isPicking, setIsPicking] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -423,9 +396,6 @@ const BaseBlockContent = memo(function BaseBlockContent({
                 isSnapped && "ring-4 ring-indigo-500/30 border-indigo-500/50 shadow-[0_0_50px_rgba(99,102,241,0.2)]",
                 isHighlighted && "border-indigo-500/40 bg-indigo-500/5 ring-1 ring-indigo-500/10"
             )}>
-                <div className="absolute top-2.5 right-4 z-20">
-                    <StatusIndicator status={status} />
-                </div>
 
                 {/* Header */}
                 <div className="flex items-center gap-3">
@@ -442,15 +412,8 @@ const BaseBlockContent = memo(function BaseBlockContent({
                         <div className="text-[13px] tracking-tight leading-relaxed">
                             <IntentSentence block={block} />
                         </div>
-                        {message && (status === 'running' || status === 'success' || status === 'failed') && (
-                            <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1 duration-300 ml-4 border-l border-white/10 pl-3 py-1 bg-white/5 rounded-r-md">
-                                <span className="text-[9px] text-zinc-400 font-bold tracking-tight italic truncate max-w-[200px] opacity-90 uppercase">
-                                    {message}
-                                </span>
-                            </div>
-                        )}
                         {branchKey && (
-                            <span className={`flex-none text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-[0.2em] border ${
+                            <span className={`flex-none text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-[0.2em] border ml-2 ${
                                 branchKey === 'then' ? 'bg-white text-black border-white' : 
                                 branchKey === 'else' ? 'bg-zinc-800 text-white border-white/20' :
                                 'bg-black text-white border-white'
@@ -459,6 +422,7 @@ const BaseBlockContent = memo(function BaseBlockContent({
                             </span>
                         )}
                     </div>
+
 
                     {/* Actions */}
                     <div className={`flex items-center gap-1 transition-all duration-300 ${isOverlay ? 'opacity-0' : 'opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0'}`}>
