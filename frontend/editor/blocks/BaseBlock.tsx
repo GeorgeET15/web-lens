@@ -32,15 +32,17 @@ import {
   GitFork,
   Repeat,
   Plus,
+  Search,
   ExternalLink,
   HardDrive,
   Cpu,
   Activity
 } from 'lucide-react';
-import { EditorBlock, SavedValue } from '../entities';
+import { EditorBlock, SavedValue, BlockType } from '../entities';
 import { ElementPicker } from '../../components/ElementPicker';
 import { ConditionSelector } from './ConditionSelector';
 import { VariableInput } from '../../components/VariableInput';
+import { DEFAULT_BLOCKS } from '../constants';
 
 export interface BaseBlockProps {
   id: string;
@@ -66,6 +68,7 @@ export interface BaseBlockProps {
   availableBranches?: { id: string, label: string, type: string }[];
   onClick?: () => void;
   isSnapped?: boolean;
+  snapType?: 'bottom' | 'then' | 'else' | 'body';
   isHighlighted?: boolean;
   selectionExists?: boolean;
 }
@@ -136,6 +139,63 @@ const BranchChildrenRenderer: React.FC<{
       )}
     </>
   );
+};
+// Searchable Block Picker Dropdown
+const BlockPickerDropdown: React.FC<{
+    onSelect: (type: BlockType) => void;
+    onClose: () => void;
+}> = ({ onSelect, onClose }) => {
+    const [search, setSearch] = useState('');
+    
+    const filteredBlocks = Object.keys(DEFAULT_BLOCKS).filter(type => 
+        DEFAULT_BLOCKS[type as BlockType].label.toLowerCase().includes(search.toLowerCase())
+    ) as BlockType[];
+
+    return (
+        <div 
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="absolute left-0 top-full mt-2 z-[9999] w-64 bg-zinc-950 border border-white/10 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col"
+        >
+            {/* Search Bar */}
+            <div className="p-3 border-b border-white/5 bg-white/5">
+                <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+                    <input 
+                        autoFocus
+                        type="text"
+                        placeholder="Search blocks..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="w-full bg-black border border-white/10 rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500/50 transition-all font-bold"
+                    />
+                </div>
+            </div>
+            {/* List */}
+            <div className="max-h-80 overflow-y-auto p-1.5 space-y-0.5 scrollbar-thin scrollbar-thumb-white/10">
+                {filteredBlocks.length > 0 ? filteredBlocks.map((type) => (
+                    <button
+                        key={type}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onSelect(type);
+                            onClose();
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 text-[11px] text-zinc-400 hover:bg-white hover:text-black transition-all rounded-lg font-black uppercase tracking-wider group"
+                    >
+                        <div className="p-1.5 rounded bg-zinc-900 group-hover:bg-black/10 transition-colors">
+                            {React.cloneElement(BLOCK_ICONS[type] as React.ReactElement, { className: 'w-3.5 h-3.5 text-zinc-500 group-hover:text-black' })}
+                        </div>
+                        {DEFAULT_BLOCKS[type].label}
+                    </button>
+                )) : (
+                    <div className="p-8 text-center">
+                        <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest">No blocks found</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
 };
 
 // Memoized outside of component to prevent recreation
@@ -277,6 +337,8 @@ const BaseBlockContent = memo(function BaseBlockContent({
     isOverlay,
     onClick,
     isSnapped,
+    snapType,
+    isHighlighted,
     isDragging
 }: BaseBlockProps & {
     dragListeners?: any;
@@ -319,6 +381,7 @@ const BaseBlockContent = memo(function BaseBlockContent({
 
     const [isPicking, setIsPicking] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
+    const [isAddingToBranch, setIsAddingToBranch] = useState<'then' | 'else' | 'body' | null>(null);
 
     const handlePick = () => {
         if (onRequestPick) {
@@ -354,10 +417,11 @@ const BaseBlockContent = memo(function BaseBlockContent({
             {/* Main Block Container */}
             <div className={cn(
                 "group relative flex flex-col p-4 py-2.5 bg-zinc-950 border rounded-2xl shadow-2xl transition-colors duration-200",
-                block.type === 'if_condition' ? "min-w-90 w-fit" : "w-90",
+                block.type === 'if_condition' ? "min-w-[480px] w-fit" : "w-90",
                 statusColors[status],
                 (isActive || isOverlay || isDragging) ? "ring-2 ring-indigo-500/20 border-indigo-500 scale-[1.01] z-[50]" : "hover:border-white/10 hover:bg-zinc-900/40 z-10",
-                isSnapped && "ring-4 ring-indigo-500/30 border-indigo-500/50 shadow-[0_0_50px_rgba(99,102,241,0.2)]"
+                isSnapped && "ring-4 ring-indigo-500/30 border-indigo-500/50 shadow-[0_0_50px_rgba(99,102,241,0.2)]",
+                isHighlighted && "border-indigo-500/40 bg-indigo-500/5 ring-1 ring-indigo-500/10"
             )}>
                 <div className="absolute top-2.5 right-4 z-20">
                     <StatusIndicator status={status} />
@@ -573,76 +637,100 @@ const BaseBlockContent = memo(function BaseBlockContent({
                     />
                     <div className="flex flex-col gap-3 relative">
                         {/* THEN Branch */}
-                        <div className="flex flex-col h-full rounded-lg overflow-hidden border border-emerald-500/20 bg-emerald-950/10">
+                        <div className={cn(
+                            "flex flex-col h-full rounded-lg border transition-all duration-300",
+                            snapType === 'then' 
+                                ? "border-emerald-400 bg-emerald-500/10 shadow-[0_0_20px_rgba(16,185,129,0.2)] scale-[1.02]" 
+                                : "border-emerald-500/20 bg-emerald-950/10"
+                        )}>
                             {/* Header */}
-                             <div className="flex items-center justify-between p-2 pl-3 bg-emerald-950/30 border-b border-emerald-500/20 group hover:bg-emerald-950/40 transition-colors">
+                             <div className={cn(
+                                 "flex items-center justify-between p-2 pl-3 border-b transition-colors",
+                                 snapType === 'then' ? "bg-emerald-500/30 border-emerald-400" : "bg-emerald-950/30 border-emerald-500/20"
+                             )}>
                                 <div className="flex items-center gap-2">
-                                    <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-                                    <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Then</span>
+                                    <CheckCircle className={cn("w-3.5 h-3.5", snapType === 'then' ? "text-white" : "text-emerald-500")} />
+                                    <span className={cn("text-[10px] font-black uppercase tracking-widest", snapType === 'then' ? "text-white" : "text-emerald-400")}>Then</span>
                                 </div>
-                                <div className="relative group/add-branch">
-                                    <button className="p-1 px-1.5 rounded hover:bg-emerald-500/20 text-emerald-500/50 hover:text-emerald-400 transition-all">
+                                <div className="relative">
+                                    <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setIsAddingToBranch(isAddingToBranch === 'then' ? null : 'then');
+                                        }}
+                                        className={cn(
+                                            "p-1 px-1.5 rounded transition-all",
+                                            isAddingToBranch === 'then' ? "bg-emerald-500 text-white" : "hover:bg-emerald-500/20 text-emerald-500/50 hover:text-emerald-400"
+                                        )}
+                                    >
                                         <Plus className="w-3.5 h-3.5" />
                                     </button>
-                                     <div className="absolute left-0 top-full mt-1 z-50 w-48 bg-black border border-white/10 rounded-lg shadow-2xl opacity-0 invisible group-hover/add-branch:opacity-100 group-hover/add-branch:visible transition-all">
-                                        <div className="p-1 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
-                                            {Object.entries(BLOCK_ICONS).map(([type, icon]) => (
-                                                <button
-                                                    key={type}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onAddBlock?.(type as any, id, 'then');
-                                                    }}
-                                                    className="w-full flex items-center gap-2 px-2 py-2 text-[10px] text-zinc-400 hover:bg-white hover:text-black transition-all rounded font-bold uppercase tracking-wider"
-                                                >
-                                                    {icon}
-                                                    {type.replace(/_/g, ' ')}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
+                                     {isAddingToBranch === 'then' && (
+                                         <BlockPickerDropdown 
+                                            onSelect={(type) => onAddBlock?.(type, id, 'then')} 
+                                            onClose={() => setIsAddingToBranch(null)} 
+                                         />
+                                     )}
                                 </div>
                              </div>
                              {/* Content */}
-                             <div className="flex-1 min-h-[50px] p-1.5">
-                                <BranchChildrenRenderer blocks={blocks} parentId={id} renderBlockList={renderBlockList} branchKey="then" emptyMessageColor="emerald" />
+                             <div className="p-4 bg-black/10 min-h-[80px] transition-all">
+                                <BranchChildrenRenderer 
+                                    blocks={blocks}
+                                    parentId={id}
+                                    branchKey="then"
+                                    renderBlockList={renderBlockList}
+                                    emptyMessageColor="emerald"
+                                />
                              </div>
                         </div>
 
                         {/* ELSE Branch */}
-                        <div className="flex flex-col h-full rounded-lg overflow-hidden border border-rose-500/20 bg-rose-950/10">
+                        <div className={cn(
+                            "flex flex-col h-full rounded-lg border transition-all duration-300",
+                            snapType === 'else' 
+                                ? "border-rose-400 bg-rose-500/10 shadow-[0_0_20px_rgba(244,63,94,0.2)] scale-[1.02]" 
+                                : "border-rose-500/20 bg-rose-950/10"
+                        )}>
                              {/* Header */}
-                             <div className="flex items-center justify-between p-2 pl-3 bg-rose-950/30 border-b border-rose-500/20 group hover:bg-rose-950/40 transition-colors">
+                             <div className={cn(
+                                 "flex items-center justify-between p-2 pl-3 border-b transition-colors",
+                                 snapType === 'else' ? "bg-rose-500/30 border-rose-400" : "bg-rose-950/30 border-rose-500/20"
+                             )}>
                                 <div className="flex items-center gap-2">
-                                    <XCircle className="w-3.5 h-3.5 text-rose-500" />
-                                    <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest">Else</span>
+                                    <XCircle className={cn("w-3.5 h-3.5", snapType === 'else' ? "text-white" : "text-rose-500")} />
+                                    <span className={cn("text-[10px] font-black uppercase tracking-widest", snapType === 'else' ? "text-white" : "text-rose-400")}>Else</span>
                                 </div>
-                                <div className="relative group/add-branch">
-                                    <button className="p-1 px-1.5 rounded hover:bg-rose-500/20 text-rose-500/50 hover:text-rose-400 transition-all">
+                                <div className="relative">
+                                    <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setIsAddingToBranch(isAddingToBranch === 'else' ? null : 'else');
+                                        }}
+                                        className={cn(
+                                            "p-1 px-1.5 rounded transition-all",
+                                            isAddingToBranch === 'else' ? "bg-rose-500 text-white" : "hover:bg-rose-500/20 text-rose-500/50 hover:text-rose-400"
+                                        )}
+                                    >
                                         <Plus className="w-3.5 h-3.5" />
                                     </button>
-                                     <div className="absolute left-0 top-full mt-1 z-50 w-48 bg-black border border-white/10 rounded-lg shadow-2xl opacity-0 invisible group-hover/add-branch:opacity-100 group-hover/add-branch:visible transition-all">
-                                        <div className="p-1 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
-                                            {Object.entries(BLOCK_ICONS).map(([type, icon]) => (
-                                                <button
-                                                    key={type}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onAddBlock?.(type as any, id, 'else');
-                                                    }}
-                                                    className="w-full flex items-center gap-2 px-2 py-2 text-[10px] text-zinc-400 hover:bg-white hover:text-black transition-all rounded font-bold uppercase tracking-wider"
-                                                >
-                                                    {icon}
-                                                    {type.replace(/_/g, ' ')}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
+                                     {isAddingToBranch === 'else' && (
+                                         <BlockPickerDropdown 
+                                            onSelect={(type) => onAddBlock?.(type, id, 'else')} 
+                                            onClose={() => setIsAddingToBranch(null)} 
+                                         />
+                                     )}
                                 </div>
                              </div>
                              {/* Content */}
-                             <div className="flex-1 min-h-[50px] p-1.5">
-                                <BranchChildrenRenderer blocks={blocks} parentId={id} renderBlockList={renderBlockList} branchKey="else" emptyMessageColor="rose" />
+                             <div className="p-4 bg-black/10 min-h-[80px] transition-all">
+                                <BranchChildrenRenderer 
+                                    blocks={blocks}
+                                    parentId={id}
+                                    branchKey="else"
+                                    renderBlockList={renderBlockList}
+                                    emptyMessageColor="rose"
+                                />
                              </div>
                         </div>
                     </div>
@@ -674,36 +762,43 @@ const BaseBlockContent = memo(function BaseBlockContent({
                     </div>
 
                     <div className="space-y-2 pt-2">
-                         <div className="p-1 px-2 rounded bg-blue-950/30 border border-blue-500/20 flex items-center justify-between group/branch-header">
-                            <span className="text-[10px] font-bold text-blue-400 uppercase tracking-tight">LOOP BODY</span>
-                            <div className="relative group/add-branch">
+                         <div className={cn(
+                             "p-1 px-2 rounded border flex items-center justify-between group/branch-header transition-all duration-300",
+                             snapType === 'body' 
+                                ? "bg-blue-500/20 border-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.2)] scale-[1.01]" 
+                                : "bg-blue-950/30 border-blue-500/20"
+                         )}>
+                            <span className={cn("text-[10px] font-bold uppercase tracking-tight", snapType === 'body' ? "text-white" : "text-blue-400")}>LOOP BODY</span>
+                            <div className="relative">
                                 <button 
-                                    className="p-0.5 rounded hover:bg-blue-500/20 text-blue-500 transition-colors"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setIsAddingToBranch(isAddingToBranch === 'body' ? null : 'body');
+                                    }}
+                                    className={cn(
+                                        "p-0.5 rounded transition-all",
+                                        isAddingToBranch === 'body' ? "bg-blue-500 text-white" : "hover:bg-blue-500/20 text-blue-500"
+                                    )}
                                     title="Add block to LOOP BODY"
                                 >
                                     <Plus className="w-3 h-3" />
                                 </button>
-                                <div className="absolute left-0 top-full mt-1 z-50 w-48 bg-gray-900 border border-white/10 rounded-lg shadow-2xl opacity-0 invisible group-hover/add-branch:opacity-100 group-hover/add-branch:visible transition-all">
-                                    <div className="p-1 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
-                                        {Object.entries(BLOCK_ICONS).map(([type, icon]) => (
-                                            <button
-                                                key={type}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onAddBlock?.(type as any, id, 'body');
-                                                }}
-                                                className="w-full flex items-center gap-2 px-2 py-1.5 text-[10px] text-zinc-400 hover:bg-white hover:text-black transition-all rounded font-bold uppercase tracking-wider"
-                                            >
-                                                {icon}
-                                                {type.replace(/_/g, ' ')}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
+                                {isAddingToBranch === 'body' && (
+                                     <BlockPickerDropdown 
+                                        onSelect={(type) => onAddBlock?.(type, id, 'body')} 
+                                        onClose={() => setIsAddingToBranch(null)} 
+                                     />
+                                 )}
                             </div>
                         </div>
-                        <div className="min-h-[40px] rounded border border-dashed border-white/5 bg-black/20 p-1">
-                            <BranchChildrenRenderer blocks={blocks} parentId={id} renderBlockList={renderBlockList} branchKey="body" emptyMessageColor="blue" />
+                        <div className="min-h-[80px] rounded border border-dashed border-white/5 bg-black/20 p-2 transition-all">
+                            <BranchChildrenRenderer 
+                                blocks={blocks}
+                                parentId={id}
+                                branchKey="body"
+                                renderBlockList={renderBlockList}
+                                emptyMessageColor="blue"
+                            />
                         </div>
                     </div>
                 </div>

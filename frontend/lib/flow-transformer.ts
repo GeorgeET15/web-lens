@@ -1,5 +1,5 @@
 import { FlowGraph, FlowBlock } from '../types/flow';
-import { DEFAULT_BLOCKS } from '../editor/FlowEditor';
+import { DEFAULT_BLOCKS } from '../editor/constants';
 import { EditorBlock, BlockType } from '../editor/entities';
 
 /**

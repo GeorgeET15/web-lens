@@ -34,6 +34,7 @@ import { EditorBlock, BlockType, SavedValue, ScenarioSuiteReport } from './entit
 import { ScenarioSuiteDashboard } from '../components/execution/ScenarioSuiteDashboard';
 import { AIInsight } from '../components/ai/AIInsight';
 import { cn } from '../lib/utils';
+import { DEFAULT_BLOCKS } from './constants';
 
 export interface FlowEditorRef {
   highlightBlockActive: (blockId: string, message?: string) => void;
@@ -49,6 +50,7 @@ export const LAYOUT_CONSTANTS = {
     BLOCK_HEIGHT: 130, // Standardized 
     VERTICAL_GAP: 20,
     BRANCH_X_OFFSET: 40,
+    EMPTY_BRANCH_HEIGHT: 50,
     GRID_SIZE: 20
 };
 
@@ -65,194 +67,6 @@ interface FlowEditorProps {
 }
 
 
-
-export const DEFAULT_BLOCKS: Record<BlockType, Omit<EditorBlock, 'id'>> = {
-  open_page: {
-    type: 'open_page',
-    label: 'Open Page',
-    params: { url: 'https://example.com' }
-  },
-  click_element: {
-    type: 'click_element',
-    label: 'Click Element',
-    params: { element: null }
-  },
-  enter_text: {
-    type: 'enter_text',
-    label: 'Enter Text',
-    params: { element: null, text: 'Hello' }
-  },
-  wait_until_visible: {
-    type: 'wait_until_visible',
-    label: 'Wait Until Visible',
-    params: { element: null, timeout_seconds: 10 }
-  },
-  assert_visible: {
-    type: 'assert_visible',
-    label: 'Assert Visible',
-    params: { element: null }
-  },
-  if_condition: {
-    type: 'if_condition',
-    label: 'If Condition',
-    params: {
-      condition: { kind: 'element_visible', element: null },
-      then_blocks: [],
-      else_blocks: []
-    }
-  },
-  repeat_until: {
-    type: 'repeat_until',
-    label: 'Repeat Until',
-    params: {
-      condition: { kind: 'element_visible', element: null },
-      body_blocks: [],
-      max_iterations: 10
-    }
-  },
-  delay: {
-    type: 'delay',
-    label: 'Delay',
-    params: { seconds: 1 }
-  },
-  refresh_page: {
-    type: 'refresh_page',
-    label: 'Refresh Page',
-    params: {}
-  },
-  wait_for_page_load: {
-    type: 'wait_for_page_load',
-    label: 'Wait For Page Load',
-    params: { timeout_seconds: 15 }
-  },
-  select_option: {
-    type: 'select_option',
-    label: 'Select From Dropdown',
-    params: { element: null, option_text: '' }
-  },
-  upload_file: {
-    type: 'upload_file',
-    label: 'Upload File',
-    params: { element: null, file: { id: '', name: '', mime_type: null, source: 'local' } }
-  },
-  verify_text: {
-    type: 'verify_text',
-    label: 'Verify Text',
-    params: { element: null, match: { mode: 'equals', value: '' } }
-  },
-  scroll_to_element: {
-    type: 'scroll_to_element',
-    label: 'Scroll To Element',
-    params: { element: null, alignment: 'center' }
-  },
-  save_text: {
-    type: 'save_text',
-    label: 'Save Text',
-    params: { element: null, save_as: { key: '', label: '' } }
-  },
-  save_page_content: {
-    type: 'save_page_content',
-    label: 'Save Page Content',
-    params: { save_as: { key: '', label: '' } }
-  },
-
-  verify_page_title: {
-    type: 'verify_page_title',
-    label: 'Verify Page Title',
-    params: { title: '' }
-  },
-  verify_url: {
-    type: 'verify_url',
-    label: 'Verify URL Contains',
-    params: { url_part: '' }
-  },
-  verify_element_enabled: {
-    type: 'verify_element_enabled',
-    label: 'Verify Element Enabled',
-    params: { element: null, should_be_enabled: true }
-  },
-  use_saved_value: {
-    type: 'use_saved_value',
-    label: 'Use Saved Value',
-    params: { 
-        target: { action: 'enter_text' },
-        element: null,
-        value_ref: { key: '', label: '' }
-    }
-  },
-  verify_network_request: {
-      type: 'verify_network_request',
-      label: 'Verify Network Request',
-      params: { 
-          url_pattern: '/api/v1',
-          method: 'ANY',
-          status_code: 200
-      }
-  },
-  verify_page_content: {
-    type: 'verify_page_content',
-    label: 'Verify Page Content',
-    params: { match: { mode: 'contains', value: '' } }
-  },
-  verify_performance: {
-      type: 'verify_performance',
-      label: 'Verify Performance',
-      params: { 
-          metric: 'page_load_time',
-          threshold_ms: 2000
-      }
-  },
-  submit_form: {
-    type: 'submit_form',
-    label: 'Submit Form',
-    params: { element: null }
-  },
-  confirm_dialog: {
-    type: 'confirm_dialog',
-    label: 'Confirm Dialog',
-    params: {}
-  },
-  dismiss_dialog: {
-    type: 'dismiss_dialog',
-    label: 'Dismiss Dialog',
-    params: {}
-  },
-  activate_primary_action: {
-    type: 'activate_primary_action',
-    label: 'Activate Primary Action',
-    params: {}
-  },
-  submit_current_input: {
-    type: 'submit_current_input',
-    label: 'Submit Current Input',
-    params: { element: null }
-  },
-  get_cookies: {
-    type: 'get_cookies',
-    label: 'Get Cookies',
-    params: {}
-  },
-  get_local_storage: {
-    type: 'get_local_storage',
-    label: 'Get Local Storage',
-    params: {}
-  },
-  get_session_storage: {
-    type: 'get_session_storage',
-    label: 'Get Session Storage',
-    params: {}
-  },
-  observe_network: {
-    type: 'observe_network',
-    label: 'Observe Network',
-    params: {}
-  },
-  switch_tab: {
-    type: 'switch_tab',
-    label: 'Switch Tab',
-    params: { to_newest: true, tab_index: 0 }
-  }
-};
 // Helper to separate render logic
 const RenderBlockList = memo(({ 
   blocks, 
@@ -331,6 +145,7 @@ const RenderBlockList = memo(({
                     isActive={highlightBlockId === block.id}
                     isHighlighted={activeFlowIds.has(block.id)}
                     isSnapped={activeSnapTarget?.id === block.id}
+                    snapType={activeSnapTarget?.id === block.id ? activeSnapTarget.type : undefined}
                     selectionExists={selectionExists}
                     onClick={() => onBlockClick?.(block.id)}
                     availableBranches={blocks
@@ -366,6 +181,8 @@ const RenderBlockList = memo(({
             onMoveToBranch={onMoveToBranch}
             isActive={highlightBlockId === block.id}
             isHighlighted={activeFlowIds.has(block.id)}
+            isSnapped={activeSnapTarget?.id === block.id}
+            snapType={activeSnapTarget?.id === block.id ? activeSnapTarget.type : undefined}
             selectionExists={selectionExists}
             onClick={() => onBlockClick?.(block.id)}
             availableBranches={blocks
@@ -517,10 +334,15 @@ const [dialogConfig, setDialogConfig] = useState<{
                 let branchPadding = 0;
                 if (block.type === 'if_condition') {
                     const thenHeight = processChain(block.id, 'then', startX + LAYOUT_CONSTANTS.BRANCH_X_OFFSET, currentY + LAYOUT_CONSTANTS.BLOCK_HEIGHT);
-                    const elseHeight = processChain(block.id, 'else', startX + LAYOUT_CONSTANTS.BRANCH_X_OFFSET, currentY + LAYOUT_CONSTANTS.BLOCK_HEIGHT + thenHeight);
-                    branchPadding = thenHeight + elseHeight;
+                    const thenSpace = Math.max(thenHeight, LAYOUT_CONSTANTS.EMPTY_BRANCH_HEIGHT);
+                    
+                    const elseHeight = processChain(block.id, 'else', startX + LAYOUT_CONSTANTS.BRANCH_X_OFFSET, currentY + LAYOUT_CONSTANTS.BLOCK_HEIGHT + thenSpace);
+                    const elseSpace = Math.max(elseHeight, LAYOUT_CONSTANTS.EMPTY_BRANCH_HEIGHT);
+                    
+                    branchPadding = thenSpace + elseSpace;
                 } else if (block.type === 'repeat_until') {
-                    branchPadding = processChain(block.id, 'body', startX + LAYOUT_CONSTANTS.BRANCH_X_OFFSET, currentY + LAYOUT_CONSTANTS.BLOCK_HEIGHT);
+                    const bodyHeight = processChain(block.id, 'body', startX + LAYOUT_CONSTANTS.BRANCH_X_OFFSET, currentY + LAYOUT_CONSTANTS.BLOCK_HEIGHT);
+                    branchPadding = Math.max(bodyHeight, LAYOUT_CONSTANTS.EMPTY_BRANCH_HEIGHT);
                 }
                 
                 currentY += totalBlockSpace + branchPadding;
@@ -779,7 +601,7 @@ const [dialogConfig, setDialogConfig] = useState<{
     }
 
     function handleDragMove(event: DragMoveEvent) {
-        const { active, collisions, delta } = event;
+        const { active, collisions } = event;
         const activeBlock = blocks.find(b => b.id === active.id);
         if (!activeBlock) return;
 
@@ -799,15 +621,7 @@ const [dialogConfig, setDialogConfig] = useState<{
             return;
         }
 
-        // Use effective position as starting point if fixed position is missing
-        const startPos = activeBlock.position || effectivePositions[activeBlock.id];
-        if (!startPos) return;
-
-        const currentX = startPos.x + delta.x / view.scale;
-        const currentY = startPos.y + delta.y / view.scale;
-
         let nearestTarget: { id: string, type: 'bottom' | 'then' | 'else' | 'body' } | null = null;
-        let minDistance = 120; // Increased magnetic radius for better feel
         
         // 1. Check Collisions (Direct Hover)
         if (collisions && collisions.length > 0) {
@@ -816,81 +630,10 @@ const [dialogConfig, setDialogConfig] = useState<{
             const targetBlock = blocks.find(b => b.id === targetId);
 
             if (targetBlock && targetId !== active.id) {
-                // If it's a control block, we might want to snap to branches
-                if (targetBlock.type === 'if_condition') {
-                    // Decide based on X offset relative to target
-                    // If far right, snap to THEN/ELSE
-                    const isRight = currentX > (targetBlock.position?.x || 0) + 150;
-                    if (isRight) {
-                        nearestTarget = { id: targetId, type: currentY > (targetBlock.position?.y || 0) + 150 ? 'else' : 'then' };
-                    } else {
-                        nearestTarget = { id: targetId, type: 'bottom' };
-                    }
-                } else if (targetBlock.type === 'repeat_until') {
-                    const isRight = currentX > (targetBlock.position?.x || 0) + 150;
-                    nearestTarget = { id: targetId, type: isRight ? 'body' : 'bottom' };
-                } else {
-                    nearestTarget = { id: targetId, type: 'bottom' };
-                }
+                nearestTarget = { id: targetId, type: 'bottom' };
             }
         }
 
-        // 2. Proximity-based Snapping (Magnetic fallback)
-        if (!nearestTarget) {
-            for (const target of blocks) {
-                // Cannot snap to self or own children
-                if (target.id === active.id) continue;
-                
-                // Deep parent check to prevent circular snaps
-                let p = target.parentId;
-                let isChild = false;
-                while (p) {
-                    if (p === active.id) { isChild = true; break; }
-                    p = blocks.find(b => b.id === p)?.parentId;
-                }
-                if (isChild) continue;
-
-                const targetPos = effectivePositions[target.id];
-                if (!targetPos) continue;
-
-                // Check Sequential (Bottom)
-                const snapY = targetPos.y + LAYOUT_CONSTANTS.BLOCK_HEIGHT + LAYOUT_CONSTANTS.VERTICAL_GAP;
-                const dist = Math.sqrt((currentX - targetPos.x)**2 + (currentY - snapY)**2);
-                
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    nearestTarget = { id: target.id, type: 'bottom' };
-                }
-
-                // Check Branches if target is a control block
-                if (target.type === 'if_condition') {
-                    // Then branch snap point
-                    const thenY = targetPos.y + LAYOUT_CONSTANTS.BLOCK_HEIGHT;
-                    const thenX = targetPos.x + LAYOUT_CONSTANTS.BRANCH_X_OFFSET;
-                    const dThen = Math.sqrt((currentX - thenX)**2 + (currentY - thenY)**2);
-                    if (dThen < minDistance) {
-                        minDistance = dThen;
-                        nearestTarget = { id: target.id, type: 'then' };
-                    }
-
-                    // Else branch snap point (estimated)
-                    const elseY = thenY + 60; // Approximate offset for empty branch
-                    const dElse = Math.sqrt((currentX - thenX)**2 + (currentY - elseY)**2);
-                    if (dElse < minDistance) {
-                        minDistance = dElse;
-                        nearestTarget = { id: target.id, type: 'else' };
-                    }
-                } else if (target.type === 'repeat_until') {
-                    const bodyY = targetPos.y + LAYOUT_CONSTANTS.BLOCK_HEIGHT;
-                    const bodyX = targetPos.x + LAYOUT_CONSTANTS.BRANCH_X_OFFSET;
-                    const dBody = Math.sqrt((currentX - bodyX)**2 + (currentY - bodyY)**2);
-                    if (dBody < minDistance) {
-                        minDistance = dBody;
-                        nearestTarget = { id: target.id, type: 'body' };
-                    }
-                }
-            }
-        }
 
         if (nearestTarget?.id !== snapTargetRef.current?.id || nearestTarget?.type !== snapTargetRef.current?.type) {
             snapTargetRef.current = nearestTarget;
