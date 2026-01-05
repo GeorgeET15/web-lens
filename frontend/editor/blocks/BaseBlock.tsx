@@ -288,10 +288,31 @@ const IntentSentence = memo(({ block }: { block: EditorBlock }) => {
             );
         case 'delay': return <div className="flex items-center flex-wrap text-zinc-400">Wait for <ValueText value={block.params.seconds?.toString()} placeholder="0" /> seconds</div>;
         case 'submit_current_input': return <div className="flex items-center flex-wrap">Submit {elName}</div>;
-        case 'use_saved_value': return (
-             <div className="flex items-center flex-wrap gap-y-1">
-                Use <ValueText value={block.params.value_ref?.label} placeholder="Saved Value" />
-             </div>
+        case 'refresh_page': return <div className="flex items-center flex-wrap text-zinc-400">Refresh the current page</div>;
+        case 'upload_file': return (
+            <div className="flex items-center flex-wrap gap-y-1">
+                Upload <ValueText value={block.params.file?.name} placeholder="file..." /> to {elName}
+            </div>
+        );
+        case 'scroll_to_element': return <div className="flex items-center flex-wrap">Scroll to {elName}</div>;
+        case 'save_page_content': return (
+            <div className="flex items-center flex-wrap gap-y-1">
+                Save entire page content as <ValueText value={block.params.save_as?.label} placeholder="variable..." />
+            </div>
+        );
+        case 'verify_network_request': return (
+            <div className="flex items-center flex-wrap gap-y-1">
+                Verify {block.params.method || 'ANY'} request to <ValueText value={block.params.url_pattern} placeholder="/pattern" />
+            </div>
+        );
+        case 'submit_form': return <div className="flex items-center flex-wrap">Submit form {elName}</div>;
+        case 'confirm_dialog': return <div className="flex items-center flex-wrap text-zinc-400 italic">Accept next system dialog</div>;
+        case 'dismiss_dialog': return <div className="flex items-center flex-wrap text-zinc-500 italic">Dismiss next system dialog</div>;
+        case 'activate_primary_action': return <div className="flex items-center flex-wrap text-indigo-400 font-bold">Trigger primary page action</div>;
+        case 'verify_page_content': return (
+            <div className="flex items-center flex-wrap gap-y-1">
+                Verify page contains <ValueText value={block.params.match?.value} placeholder="text..." />
+            </div>
         );
         case 'get_cookies': return <div className="flex items-center flex-wrap text-zinc-400">Capture all cookies</div>;
         case 'get_local_storage': return <div className="flex items-center flex-wrap text-zinc-400">Capture Local Storage</div>;
@@ -390,7 +411,7 @@ const BaseBlockContent = memo(function BaseBlockContent({
             {/* Main Block Container */}
             <div className={cn(
                 "group relative flex flex-col p-4 py-2.5 bg-zinc-950 border rounded-2xl shadow-2xl transition-colors duration-200",
-                block.type === 'if_condition' ? "min-w-[480px] w-fit" : "w-90",
+                (block.type === 'if_condition' || block.type === 'repeat_until') ? "min-w-[480px] w-fit" : "w-90",
                 statusColors[status],
                 (isActive || isOverlay || isDragging) ? "ring-2 ring-indigo-500/20 border-indigo-500 scale-[1.01] z-[50]" : "hover:border-white/10 hover:bg-zinc-900/40 z-10",
                 isSnapped && "ring-4 ring-indigo-500/30 border-indigo-500/50 shadow-[0_0_50px_rgba(99,102,241,0.2)]",
@@ -579,12 +600,27 @@ const BaseBlockContent = memo(function BaseBlockContent({
                             className="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white focus:border-white/20 transition-all"
                             placeholder="Text to enter"
                         />
-                        <div className="text-[9px] text-zinc-600 px-1 flex items-center justify-between">
-                            <div className="flex items-center gap-1">
-                                <Database className="w-2.5 h-2.5" />
-                                <span>Type <code className="text-white">{"{{ "}</code> for suggestions</span>
-                            </div>
-                        </div>
+                         <div className="text-[9px] text-zinc-600 px-1 flex items-center justify-between">
+                             <div className="flex items-center gap-1">
+                                 <Database className="w-2.5 h-2.5" />
+                                 <span>Type <code className="text-white">{"{{ "}</code> for suggestions</span>
+                             </div>
+                             <button
+                                 onClick={() => onUpdate?.(id, { params: { ...block.params, clear_first: !block.params.clear_first } })}
+                                 className={cn(
+                                     "flex items-center gap-1 px-1.5 py-0.5 rounded transition-all border",
+                                     block.params.clear_first 
+                                         ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-400" 
+                                         : "bg-white/5 border-white/5 text-zinc-600 hover:text-zinc-500"
+                                 )}
+                             >
+                                 <div className={cn(
+                                     "w-1 h-1 rounded-full",
+                                     block.params.clear_first ? "bg-indigo-400 animate-pulse" : "bg-zinc-600"
+                                 )} />
+                                 <span className="uppercase font-bold tracking-tighter">Clear First</span>
+                             </button>
+                         </div>
                     </div>
                 </div>
                 </>
@@ -755,7 +791,7 @@ const BaseBlockContent = memo(function BaseBlockContent({
                                  )}
                             </div>
                         </div>
-                        <div className="min-h-[80px] rounded border border-dashed border-white/5 bg-black/20 p-2 transition-all">
+                        <div className="p-4 bg-black/10 min-h-[80px] transition-all">
                             <BranchChildrenRenderer 
                                 blocks={blocks}
                                 parentId={id}

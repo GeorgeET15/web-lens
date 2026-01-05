@@ -15,7 +15,7 @@ export const DEFAULT_BLOCKS: Record<BlockType, Omit<EditorBlock, 'id'>> = {
   enter_text: {
     type: 'enter_text',
     label: 'Enter Text',
-    params: { element: null, text: 'Hello' }
+    params: { element: null, text: 'Hello', clear_first: true }
   },
   wait_until_visible: {
     type: 'wait_until_visible',
@@ -41,8 +41,8 @@ export const DEFAULT_BLOCKS: Record<BlockType, Omit<EditorBlock, 'id'>> = {
     label: 'Repeat Until',
     params: {
       condition: { kind: 'element_visible', element: null },
-      then_blocks: [],
-      else_blocks: []
+      body_blocks: [],
+      max_iterations: 10
     }
   },
   delay: {
