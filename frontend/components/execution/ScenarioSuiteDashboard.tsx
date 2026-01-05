@@ -248,7 +248,6 @@ export const ScenarioSuiteDashboard: React.FC<ScenarioSuiteDashboardProps> = ({
                 <div className="mt-4 border-t border-white/5 pt-4 animate-in slide-in-from-top-2 duration-300">
                   <AIInsight
                     type="inspection"
-                    roleLabel="AI Analysis"
                     content={scenarioInsights[result.runId || (result as any).run_id].content}
                     isLoading={scenarioInsights[result.runId || (result as any).run_id].isLoading}
                     isCollapsible={false}
