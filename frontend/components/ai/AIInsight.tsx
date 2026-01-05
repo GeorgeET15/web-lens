@@ -19,7 +19,7 @@ export const AIInsight: React.FC<AIInsightProps> = ({
   type, 
   content, 
   roleLabel,
-  isOpen: initialIsOpen = true, 
+  isOpen: initialIsOpen = false, 
   onClose,
   className,
   isLoading,
@@ -31,11 +31,11 @@ export const AIInsight: React.FC<AIInsightProps> = ({
 
   return (
     <div className={cn(
-      "rounded-lg border transition-all duration-300 overflow-hidden",
-      type === 'failure' && "bg-purple-50/50 border-purple-200 dark:bg-purple-900/10 dark:border-purple-800",
-      type === 'inspection' && "bg-blue-50/50 border-blue-200 dark:bg-blue-900/10 dark:border-indigo-500/20",
-      type === 'draft' && "bg-indigo-500/5 border-indigo-500/20 dark:bg-indigo-900/10",
-      type === 'stability' && "bg-emerald-500/5 border-emerald-500/20 dark:bg-emerald-900/10",
+      "rounded-lg border border-dashed transition-all duration-300 overflow-hidden",
+      type === 'failure' && "bg-purple-50/50 border-purple-200/40 dark:bg-zinc-900/50 dark:border-purple-800/30",
+      type === 'inspection' && "bg-blue-50/50 border-blue-200/40 dark:bg-zinc-900/50 dark:border-indigo-500/10",
+      type === 'draft' && "bg-indigo-500/5 border-indigo-500/20 dark:bg-zinc-900/50 dark:border-indigo-500/10",
+      type === 'stability' && "bg-emerald-500/5 border-emerald-500/20 dark:bg-zinc-900/50 dark:border-emerald-500/10",
       className
     )}>
       {/* Header - Only show if collapsible or has onClose */}
@@ -57,8 +57,15 @@ export const AIInsight: React.FC<AIInsightProps> = ({
             <Sparkles size={16} />
           </div>
           
-          <div className="flex-1 font-black text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-            {roleLabel || "AI Analysis"}
+          <div className="flex-1">
+            <div className="font-black text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60">
+              {roleLabel || "AI Commentary (Non-Authoritative)"}
+            </div>
+            {isOpen && (
+              <div className="text-[9px] text-zinc-600 font-medium italic mt-0.5">
+                Generated from existing execution data. Does not affect execution.
+              </div>
+            )}
           </div>
 
           {onClose && (
@@ -84,8 +91,8 @@ export const AIInsight: React.FC<AIInsightProps> = ({
             <div className="py-6 space-y-4">
               <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400 animate-pulse">
                 <Sparkles size={12} className="animate-spin-slow" />
-                <span>WebLens is conducting deep audit...</span>
-              </div>
+              <span>WebLens is generating commentary...</span>
+            </div>
               <div className="space-y-3">
                 <div className="h-2.5 bg-indigo-500/5 rounded-full w-full overflow-hidden relative">
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-indigo-500/10 to-transparent -translate-x-full animate-shimmer" />

@@ -22,7 +22,7 @@ import {
 
 import type { FlowGraph } from '../types/flow';
 import { BaseBlock, BaseBlockOverlay } from './blocks/BaseBlock';
-import { Plus, Minus, Save, FolderOpen, Trash2, X, LocateFixed, Sparkles } from 'lucide-react';
+import { Plus, Minus, Save, FolderOpen, Trash2, X, LocateFixed, Sparkles, Info } from 'lucide-react';
 import { FlowStorage, SavedFlowMetadata } from '../lib/storage';
 import { OnboardingModal } from '../components/OnboardingModal';
 import { Minimap } from './Minimap';
@@ -1621,12 +1621,18 @@ const [dialogConfig, setDialogConfig] = useState<{
                     {/* Role 1: AI Translator */}
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-400">AI Translator</h4>
-                            <span className="text-[8px] bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest border border-indigo-500/20">Draft Mode</span>
+                            <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Draft Sequence</h4>
+                            <span className="text-[8px] bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest border border-indigo-500/20">Generated Prototype</span>
                         </div>
                         <p className="text-[10px] text-zinc-500 leading-relaxed font-medium">
-                            Describe your intent. AI creates a non-runnable draft (Role 1).
+                            Describe your intent. AI summarizes and describes a non-runnable draft.
                         </p>
+                        <div className="bg-amber-500/5 border border-amber-500/20 p-3 rounded-lg flex gap-3">
+                            <Info size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                            <p className="text-[9px] text-amber-200/60 leading-relaxed italic">
+                                This is a non-runnable draft. Review blocks and manually pick elements before execution.
+                            </p>
+                        </div>
                         <textarea 
                             value={intentText}
                             onChange={(e) => setIntentText(e.target.value)}
@@ -1639,17 +1645,17 @@ const [dialogConfig, setDialogConfig] = useState<{
                             className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-[0.98] flex items-center justify-center gap-2"
                         >
                             {isGeneratingDraft && <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />}
-                            {isGeneratingDraft ? 'Translating...' : 'Generate Test Draft'}
+                            {isGeneratingDraft ? 'Creating...' : 'Create Draft Blocks'}
                         </button>
 
                         {translatorFeedback && (
                             <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
                                 <AIInsight 
-                                    roleLabel="AI Draft"
+                                    roleLabel="Draft Commentary (Non-Authoritative)"
                                     type="draft"
                                     content={translatorFeedback}
                                     isCollapsible={false}
-                                    className="bg-indigo-500/5 border-indigo-500/10"
+                                    className="bg-indigo-500/5 border-dashed border-indigo-500/10"
                                 />
                                 <button 
                                     onClick={handleApplyDraft}
@@ -1666,28 +1672,28 @@ const [dialogConfig, setDialogConfig] = useState<{
                     {/* Role 3: Live Investigator */}
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Flow Review</h4>
-                            <span className="text-[8px] bg-white/5 text-zinc-500 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest border border-white/10">Evidence Based</span>
+                            <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">AI Commentary (Non-Authoritative)</h4>
+                            <span className="text-[8px] bg-white/5 text-zinc-500 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest border border-white/10">Evidence Review</span>
                         </div>
                         <p className="text-[10px] text-zinc-600 leading-relaxed font-medium">
-                            Audit the current flow (Role 3) for logic and potential failure points.
+                            Summarizes the current flow for logic patterns and potential block interactions.
                         </p>
                         <button 
                             onClick={handleReviewFlow}
                             disabled={isAiReviewLoading}
                             className="w-full py-3 border border-indigo-500/50 hover:bg-indigo-500/10 text-indigo-400 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2"
                         >
-                            {isAiReviewLoading && <div className="w-3 h-3 border-2 border-indigo-400/20 border-t-indigo-400 rounded-full animate-spin" />}
-                            Run Flow Review
+                            {isAiReviewLoading ? 'Summarizing...' : 'Generate Flow Commentary'}
                         </button>
 
                         {aiReview && !isAiReviewLoading && (
                             <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
                                 <AIInsight 
                                     type="inspection" 
-                                    roleLabel="AI Analysis"
+                                    roleLabel="AI Commentary (Non-Authoritative)"
                                     content={aiReview} 
                                     isCollapsible={false}
+                                    className="border-dashed"
                                 />
                             </div>
                         )}
@@ -1724,10 +1730,11 @@ const [dialogConfig, setDialogConfig] = useState<{
                         {companionAnswer && (
                             <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
                                 <AIInsight 
-                                    roleLabel="AI Explanation"
+                                    roleLabel="WebLens Commentary (Non-Authoritative)"
                                     type="inspection"
                                     content={companionAnswer}
                                     onClose={() => setCompanionAnswer("")}
+                                    className="border-dashed"
                                 />
                             </div>
                         )}
@@ -1736,7 +1743,7 @@ const [dialogConfig, setDialogConfig] = useState<{
                 
                 <div className="p-6 border-t border-white/5 bg-black/20">
                     <p className="text-[9px] text-zinc-700 uppercase tracking-[0.2em] text-center font-black">
-                        Constitutional Advisory Only
+                        Generated Commentary • Non-Authoritative
                     </p>
                 </div>
             </div>

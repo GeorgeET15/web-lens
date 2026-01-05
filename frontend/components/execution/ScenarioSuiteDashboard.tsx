@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AIInsight } from '../ai/AIInsight';
+import { AIDisclaimer } from '../ai/AIDisclaimer';
 import { 
   CheckCircle2, XCircle, Clock, 
   BarChart3, LayoutList, Sparkles,
@@ -33,7 +34,7 @@ export const ScenarioSuiteDashboard: React.FC<ScenarioSuiteDashboardProps> = ({
   const suiteId = report.suiteId || (report as any).suite_id || 'Unknown ID';
   const [scenarioInsights, setScenarioInsights] = useState<Record<string, { content: string, isLoading: boolean, isCollapsed: boolean }>>({});
 
-  // Role 2: Stability Advisor State
+  // Role 2: Run Summary Commentary State
   const [stabilityInsight, setStabilityInsight] = useState<string>("");
   const [isStabilityLoading, setIsStabilityLoading] = useState(false);
 
@@ -91,7 +92,7 @@ export const ScenarioSuiteDashboard: React.FC<ScenarioSuiteDashboardProps> = ({
       setStabilityInsight(data.summary);
     } catch (err) {
       console.error("Stability Audit failed:", err);
-      setStabilityInsight("Unable to conduct stability audit at this time.");
+      setStabilityInsight("Unable to generate summary commentary at this time.");
     } finally {
       setIsStabilityLoading(false);
     }
@@ -120,7 +121,7 @@ export const ScenarioSuiteDashboard: React.FC<ScenarioSuiteDashboardProps> = ({
             className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500/20 transition-all disabled:opacity-50"
           >
             <Sparkles className={cn("w-3 h-3", isStabilityLoading && "animate-spin")} />
-            {isStabilityLoading ? 'Analyzing History...' : 'Stability Audit'}
+            {isStabilityLoading ? 'Summarizing...' : 'Run Summary (Computed + Commentary)'}
           </button>
           <button 
             onClick={onBackToEditor}
@@ -131,16 +132,7 @@ export const ScenarioSuiteDashboard: React.FC<ScenarioSuiteDashboardProps> = ({
         </div>
       </div>
 
-      {stabilityInsight && (
-        <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-500">
-          <AIInsight 
-            type="stability"
-            roleLabel="AI Analysis"
-            content={stabilityInsight}
-            onClose={() => setStabilityInsight("")}
-          />
-        </div>
-      )}
+      {/* Removed stabilityInsight from top */}
 
       {/* Summary Ribbon */}
       <div className="grid grid-cols-4 border-b border-white/10">
@@ -241,7 +233,7 @@ export const ScenarioSuiteDashboard: React.FC<ScenarioSuiteDashboardProps> = ({
                     ) : (
                       <Sparkles className="w-3 h-3" />
                     )}
-                    {scenarioInsights[result.runId || (result as any).run_id] && !scenarioInsights[result.runId || (result as any).run_id].isCollapsed ? 'Collapse' : 'Investigate'}
+                    {scenarioInsights[result.runId || (result as any).run_id] && !scenarioInsights[result.runId || (result as any).run_id].isCollapsed ? 'Collapse' : 'Review Commentary'}
                   </button>
                   {!result.success && (
                     <span className="text-[8px] font-black uppercase tracking-tighter px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
@@ -260,18 +252,39 @@ export const ScenarioSuiteDashboard: React.FC<ScenarioSuiteDashboardProps> = ({
                     content={scenarioInsights[result.runId || (result as any).run_id].content}
                     isLoading={scenarioInsights[result.runId || (result as any).run_id].isLoading}
                     isCollapsible={false}
+                    roleLabel="AI Commentary (Non-Authoritative)"
                   />
+                  <div className="mt-4 opacity-50">
+                    <AIDisclaimer />
+                  </div>
                 </div>
               )}
             </div>
           ))}
         </div>
+
+        {stabilityInsight && (
+          <div className="mt-8 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
+            <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.3em] flex items-center gap-2 mb-4">
+              <Sparkles className="w-3.5 h-3.5" />
+              Global Commentary (Optional)
+            </h3>
+            <AIInsight 
+              type="stability"
+              roleLabel="Run Summary Commentary (Non-Authoritative)"
+              content={stabilityInsight}
+              onClose={() => setStabilityInsight("")}
+              isOpen={true}
+            />
+            <AIDisclaimer />
+          </div>
+        )}
       </div>
 
       {/* Footer Info */}
       <div className="p-4 border-t border-white/10 bg-black text-center">
         <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-[0.4em]">
-          WebLens Scenario Suite • Inspection-First Insight
+          WebLens Scenario Suite • Deterministic Telemetry
         </p>
       </div>
     </div>
