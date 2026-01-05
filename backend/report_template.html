@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebLens Report | {{run_id}}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #09090b;
+            --card: #18181b;
+            --border: #27272a;
+            --muted: #71717a;
+            --text: #e4e4e7;
+            --indigo: #6366f1;
+            --green: #22c55e;
+            --red: #ef4444;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: var(--bg); 
+            color: var(--text); 
+            line-height: 1.6;
+            padding: 40px 20px;
+        }
+
+        .container { max-width: 1000px; margin: 0 auto; }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            font-weight: 800;
+            font-size: 1.5rem;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo span { color: var(--indigo); }
+
+        .status-badge {
+            padding: 6px 16px;
+            border-radius: 99px;
+            font-weight: 700;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .status-badge.success { background: rgba(34, 197, 94, 0.1); color: var(--green); border: 1px solid rgba(34, 197, 94, 0.2); }
+        .status-badge.failed { background: rgba(239, 68, 68, 0.1); color: var(--red); border: 1px solid rgba(239, 68, 68, 0.2); }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .meta-item {
+            background: var(--card);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .meta-label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            letter-spacing: 0.05em;
+        }
+
+        .meta-value { font-weight: 500; font-size: 0.95rem; }
+
+        h2 { 
+            font-size: 1.25rem; 
+            margin-bottom: 24px; 
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        h2::before {
+            content: '';
+            width: 4px;
+            height: 20px;
+            background: var(--indigo);
+            border-radius: 2px;
+        }
+
+        .block-list { display: flex; flex-direction: column; gap: 16px; }
+
+        .block {
+            background: var(--card);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+
+        .block:hover { border-color: var(--indigo); }
+
+        .block-header {
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255,255,255,0.02);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .block-info { display: flex; align-items: center; gap: 12px; }
+        .block-type { font-weight: 700; font-size: 0.9rem; }
+        .block-duration { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--muted); }
+
+        .block-status { width: 8px; height: 8px; border-radius: 50%; }
+        .block-status.success { background: var(--green); box-shadow: 0 0 8px var(--green); }
+        .block-status.failed { background: var(--red); box-shadow: 0 0 8px var(--red); }
+
+        .block-content { padding: 20px; }
+
+        .trace-list { list-style: none; }
+        .trace-item {
+            font-size: 0.85rem;
+            color: var(--muted);
+            margin-bottom: 6px;
+            padding-left: 14px;
+            position: relative;
+        }
+
+        .trace-item::before {
+            content: '›';
+            position: absolute;
+            left: 0;
+            color: var(--indigo);
+        }
+
+        .evidence-container { margin-top: 20px; }
+
+        .screenshot-frame {
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            margin-top: 16px;
+            background: #000;
+        }
+
+        .screenshot-frame img { width: 100%; display: block; }
+
+        .data-evidence {
+            margin-top: 16px;
+            background: #0c0c0e;
+            border-radius: 8px;
+            padding: 16px;
+            border: 1px solid var(--border);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--muted);
+            overflow-x: auto;
+        }
+
+        .error-section {
+            background: rgba(239, 68, 68, 0.05);
+            border: 1px solid var(--red);
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 40px;
+        }
+
+        .error-title { color: var(--red); font-weight: 800; margin-bottom: 12px; font-size: 1.1rem; }
+        .error-details { font-size: 0.9rem; color: var(--text); margin-bottom: 20px; }
+        .error-suggestion {
+            background: rgba(255,255,255,0.05);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: var(--muted);
+            border-left: 3px solid var(--indigo);
+        }
+
+        footer {
+            margin-top: 60px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.75rem;
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+        }
+
+        @media (max-width: 600px) {
+            header { flex-direction: column; align-items: flex-start; gap: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">Web<span>Lens</span> Instrument</div>
+            <div class="status-badge {{status_class}}">{{status_text}}</div>
+        </header>
+
+        {{error_html}}
+
+        <div class="meta-grid">
+            <div class="meta-item">
+                <div class="meta-label">Flow Name</div>
+                <div class="meta-value">{{flow_name}}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Run ID</div>
+                <div class="meta-value" style="font-family: monospace; font-size: 0.8rem;">{{run_id}}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Executed On</div>
+                <div class="meta-value">{{execution_time}}</div>
+            </div>
+        </div>
+
+        <h2>Step Execution Timeline</h2>
+        <div class="block-list">
+            {{blocks_html}}
+        </div>
+
+        <footer>
+            Generated by WebLens Engine &copy; 2026. All rights reserved.
+        </footer>
+    </div>
+</body>
+</html>

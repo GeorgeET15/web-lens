@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+:root {
+  background-color: #000;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+  --bg-primary: #000;
+  --bg-secondary: #0a0a0a;
+  --bg-tertiary: #111;
+  --border-color: #1a1a1a;
+  --accent-color: #fff;
+}
+
+/* Global Scrollbar Reset */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #222;
+  border: 2px solid var(--bg-primary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #333;
+}
+
+/* Scrollbar Corner */
+::-webkit-scrollbar-corner {
+  background: var(--bg-primary);
+}
+
+/* Firefox Support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #222 var(--bg-primary);
+}
+
+body {
+    margin: 0;
+    overflow: hidden;
+    background: var(--bg-primary);
+}
+
+#root {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.5s infinite linear;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 12s infinite linear;
+}

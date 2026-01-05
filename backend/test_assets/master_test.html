@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebLens Master Test Page</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 2rem; background: #f8fafc; }
+        section { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); margin-bottom: 2rem; }
+        h1 { color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; }
+        h2 { color: #334155; margin-top: 0; }
+        .hidden { display: none; }
+        .visible { display: block; }
+        .box { padding: 1rem; border: 2px dashed #94a3b8; border-radius: 8px; margin: 1rem 0; text-align: center; }
+        button { background: #3b82f6; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
+        button:hover { background: #2563eb; }
+        button:disabled { background: #d1d5db; cursor: not-allowed; }
+        .primary-btn { background: #10b981; padding: 1.2rem 2.4rem; font-size: 1.2rem; display: block; margin: 2rem auto; }
+        .primary-btn:hover { background: #059669; }
+        input, select { padding: 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; width: 100%; box-sizing: border-box; margin-bottom: 1rem; }
+        .spacer { height: 1000px; background: linear-gradient(to bottom, #f8fafc, #e2e8f0); display: flex; align-items: center; justify-content: center; color: #94a3b8; font-style: italic; }
+        #network-status { font-weight: bold; color: #64748b; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>WebLens functional verification suite</h1>
+        <p>This page contains all elements necessary to verify the 33 core blocks of WebLens.</p>
+    </header>
+
+    <!-- Basic Interactions & Visibility -->
+    <section id="basic-interactions">
+        <h2>1. Basic Interactions</h2>
+        <button id="click-target" onclick="this.innerText='Clicked!'">Click Me</button>
+        <div class="box">
+            <input type="text" id="text-input" placeholder="Type something here...">
+        </div>
+        <div class="box">
+            <select id="select-dropdown">
+                <option value="">Select an option...</option>
+                <option value="opt1">Option 1</option>
+                <option value="opt2">Option 2</option>
+                <option value="opt3">Option 3</option>
+            </select>
+        </div>
+        <button id="delay-btn" onclick="setTimeout(() => document.getElementById('delayed-element').classList.remove('hidden'), 2000)">
+            Show element after 2s
+        </button>
+        <div id="delayed-element" class="hidden box" style="background: #ecfdf5; border-color: #10b981; color: #065f46;">
+            I appeared after a delay!
+        </div>
+    </section>
+
+    <!-- Forms & Semantic Actions -->
+    <section id="forms">
+        <h2>2. Forms & Semantic</h2>
+        <form id="test-form" onsubmit="event.preventDefault(); document.getElementById('form-status').innerText='Form Submitted!';">
+            <input type="email" placeholder="email@example.com" required>
+            <button type="submit">Submit Form</button>
+        </form>
+        <p id="form-status" style="color: #059669; font-weight: bold;"></p>
+        
+        <div class="box">
+            <input type="text" id="semantic-input" placeholder="Hit Enter here..." onkeydown="if(event.key==='Enter') document.getElementById('semantic-status').innerText='Enter Pressed!';">
+            <p id="semantic-status"></p>
+        </div>
+
+        <button class="primary-btn" id="the-primary-action" onclick="alert('Primary Action Activated!')">
+            CONFIRM ORDER
+        </button>
+    </section>
+
+    <!-- Data & State -->
+    <section id="data-state">
+        <h2>3. Data & State</h2>
+        <div class="box" id="text-to-save">ORDER-ID-98765</div>
+        <button onclick="document.cookie='test_cookie=weblens_val; path=/'; localStorage.setItem('test_local', 'local_val'); sessionStorage.setItem('test_session', 'session_val');">
+            Set Storage Data
+        </button>
+        <div class="box">
+            <input type="file" id="file-upload">
+        </div>
+        <button id="disabled-btn" disabled>Disabled Button</button>
+    </section>
+
+    <!-- Network & Performance -->
+    <section id="network-perf">
+        <h2>4. Network & Perf</h2>
+        <button onclick="fetch('/api/test-network').then(r => r.json()).catch(e => {}); document.getElementById('network-status').innerText='Request Sent!';">
+            Trigger Network Request
+        </button>
+        <p id="network-status">Idle</p>
+    </section>
+
+    <!-- Dialogs -->
+    <section id="dialogs">
+        <h2>5. Dialogs</h2>
+        <button onclick="if(confirm('Are you sure?')) { this.innerText='Confirmed'; } else { this.innerText='Dismissed'; }">
+            Trigger Confirm
+        </button>
+    </section>
+
+    <!-- iFrames & Frames -->
+    <section id="frames-section">
+        <h2>7. Frames</h2>
+        <div class="box">
+            <iframe id="test-iframe" srcdoc="<html><body style='font-family: sans-serif; background: #f1f5f9; padding: 10px;'><h3>Inside iFrame</h3><button id='iframe-btn' onclick='this.innerText=&quot;Iframe Clicked!&quot;'>Click Me</button></body></html>" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 4px; height: 100px;"></iframe>
+        </div>
+    </section>
+
+    <!-- Shadow DOM -->
+    <section id="shadow-section">
+        <h2>8. Shadow DOM</h2>
+        <div id="shadow-host" class="box"></div>
+    </section>
+
+    <!-- Hidden & Invisible -->
+    <section id="visibility-section">
+        <h2>9. Multi-State Visibility</h2>
+        <div class="grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div id="not-visible" class="box" style="visibility: hidden;">Visibility: Hidden</div>
+            <div id="opacity-zero" class="box" style="opacity: 0;">Opacity: 0</div>
+        </div>
+        <button onclick="document.getElementById('not-visible').style.visibility='visible'; document.getElementById('opacity-zero').style.opacity='1';">
+            Make Elements Truly Visible
+        </button>
+    </section>
+    
+    <!-- Data Tables -->
+    <section id="table-section">
+        <h2>10. Data Tables</h2>
+        <table style="width: 100%; border-collapse: collapse; margin: 1rem 0;">
+            <thead>
+                <tr style="background: #f1f5f9;">
+                    <th style="border: 1px solid #cbd5e1; padding: 8px;">Block ID</th>
+                    <th style="border: 1px solid #cbd5e1; padding: 8px;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="border: 1px solid #cbd5e1; padding: 8px;">BLK-001</td>
+                    <td style="border: 1px solid #cbd5e1; padding: 8px; color: #10b981;">RUNNING</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #cbd5e1; padding: 8px;">BLK-002</td>
+                    <td style="border: 1px solid #cbd5e1; padding: 8px; color: #ef4444;">FAILED</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <!-- Hover Actions -->
+    <section id="hover-section">
+        <h2>11. Hover Actions</h2>
+        <div id="hover-trigger" class="box" style="background: #f8fafc; transition: all 0.3s; cursor: help;">
+            Hover over me to see a secret!
+            <div id="hover-secret" class="hidden" style="margin-top: 0.5rem; color: #3b82f6; font-weight: bold;">
+                SECRET-TOKEN-XYZ
+            </div>
+        </div>
+        <script>
+            const trigger = document.getElementById('hover-trigger');
+            trigger.onmouseenter = () => document.getElementById('hover-secret').classList.remove('hidden');
+            trigger.onmouseleave = () => document.getElementById('hover-secret').classList.add('hidden');
+        </script>
+    </section>
+
+    <!-- Dynamic Enabled State -->
+    <section id="state-section">
+        <h2>12. Dynamic State</h2>
+        <button id="enable-after-delay" disabled onclick="this.innerText='Enabled!'">
+            Wait 3s to enable
+        </button>
+        <script>
+            setTimeout(() => document.getElementById('enable-after-delay').disabled = false, 3000);
+        </script>
+    </section>
+
+    <!-- Scrolling -->
+    <div class="spacer">Scroll down for more...</div>
+
+    <section id="footer-section">
+        <h2>13. Footer (Scroll Target)</h2>
+        <p id="footer-text">You have reached the bottom of the test suite.</p>
+    </section>
+
+    <script>
+        // Set some initial data for verification
+        document.title = "WebLens Master Test Page";
+        
+        // Initialize Shadow DOM
+        const host = document.getElementById('shadow-host');
+        const shadowRoot = host.attachShadow({mode: 'open'});
+        shadowRoot.innerHTML = `
+            <style>
+                button { background: #6366f1; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; }
+                p { margin: 0 0 0.5rem 0; font-size: 0.9rem; color: #475569; }
+            </style>
+            <p>I am inside a Shadow Root!</p>
+            <button id="shadow-btn" onclick="this.innerText='Shadow Clicked!'">Sensitive Action</button>
+        `;
+
+        console.log("Master test page load complete.");
+    </script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+{
+  "name": "Conditional Flow Example",
+  "description": "Demonstrates if/else conditional logic",
+  "entry_block": "block_1",
+  "blocks": [
+    {
+      "id": "block_1",
+      "type": "open_page",
+      "url": "https://the-internet.herokuapp.com/dynamic_loading/1",
+      "next_block": "block_2"
+    },
+    {
+      "id": "block_2",
+      "type": "click_element",
+      "selector": "#start button",
+      "selector_type": "css",
+      "description": "Click start button",
+      "next_block": "block_3"
+    },
+    {
+      "id": "block_3",
+      "type": "if_condition",
+      "condition": "element_visible",
+      "selector": "#loading",
+      "selector_type": "css",
+      "description": "Check if loading indicator is visible",
+      "then_block": "block_4",
+      "else_block": "block_5",
+      "next_block": "block_6"
+    },
+    {
+      "id": "block_4",
+      "type": "wait_until_visible",
+      "selector": "#finish",
+      "selector_type": "css",
+      "timeout_seconds": 10,
+      "description": "Wait for loading to complete",
+      "next_block": null
+    },
+    {
+      "id": "block_5",
+      "type": "assert_visible",
+      "selector": "#finish",
+      "selector_type": "css",
+      "description": "Verify finish message already visible",
+      "next_block": null
+    },
+    {
+      "id": "block_6",
+      "type": "assert_visible",
+      "selector": "#finish",
+      "selector_type": "css",
+      "description": "Final verification",
+      "next_block": null
+    }
+  ]
+}

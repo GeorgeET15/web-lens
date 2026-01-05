@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=WebLens
+Comment=Local browser testing application
+Exec=weblens
+Icon=weblens
+Categories=Development;
+Terminal=false
