@@ -170,7 +170,7 @@ class BlockInterpreter:
         # Configure retry strategy based on confidence
         if confidence == 'high':
             max_retries = 2
-            wait_interval = 0.5  # seconds
+            wait_interval = 0.2  # Reduced from 0.5 for faster feedback
             strategy_desc = "fast-fail"
         elif confidence == 'low':
             max_retries = 5
@@ -204,7 +204,18 @@ class BlockInterpreter:
             for msg in msgs:
                 self.context.emit_taf(channel, msg)
         
-        # Deterministic Smart Wait (Phase 2): Wait for page to settle/animations
+        # 1. Fast-Path Resolution (Zero-Wait)
+        # Attempt to find the element immediately without triggering expensive stability guards.
+        # This drastically improves speed for static pages and fast UI.
+        try:
+            handle = self.resolver.resolve(self.engine, target_ref)
+            if handle:
+                self.context.emit_taf("trace", "Fast-Path: Element found instantly. Skipping stability guard.")
+                return handle
+        except Exception:
+            pass
+
+        # 2. Deterministic Smart Wait (Phase 2): Wait for page to settle/animations
         self.context.emit_taf("trace", "SmartWait: Waiting for page stability before resolution...")
         try:
             self.engine.wait_for_stability(timeout_seconds=5.0)

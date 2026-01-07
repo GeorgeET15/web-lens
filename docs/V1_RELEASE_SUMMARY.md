@@ -9,15 +9,15 @@
 
 ## EXECUTIVE SUMMARY
 
-WebLens v1.0.0 is a **production-ready, philosophy-complete** Zero-Code Visual Web Testing Platform. This release marks the formal freeze of all v1 invariants and establishes strict change control policies for the v1.x series.
+WebLens v1.0.0 is a **professional-grade, free, proprietary local application**. This release marks the formal freeze of all v1 invariants and establishes strict change control policies for the v1.x series.
 
-**Core Achievement**: A professional-grade testing platform that eliminates selectors, enforces semantic intent, guarantees deterministic execution, and provides complete explainability—all without requiring users to write a single line of code.
+**Core Achievement**: A professional-grade testing platform that eliminates selectors, enforces semantic intent, guarantees deterministic execution, and provides complete explainability—all while running entirely on the user's local machine with no accounts or cloud dependencies required.
 
 ---
 
 ## FROZEN INVARIANTS (70+ Rules)
 
-All v1 invariants are documented in `REPLAY_V1_INVARIANTS.md`. Key guarantees:
+All v1 invariants are documented in `WEBLENS_V1_INVARIANTS.md`. Key guarantees:
 
 ### 1. Zero-Code Contract
 - ❌ No manual selectors (CSS/XPath)
@@ -109,8 +109,9 @@ Documented in `CHANGE_POLICY.md`. Summary:
 
 ### Documentation ✅
 - `README.md`: Accurate, no aspirational language
+- `LICENSE.txt`: Proprietary Free Use Agreement
 - `ARCHITECTURE.md`: Up-to-date
-- `REPLAY_V1_INVARIANTS.md`: Comprehensive (70+ rules)
+- `WEBLENS_V1_INVARIANTS.md`: Comprehensive (70+ rules)
 - `CHANGE_POLICY.md`: Clear guidelines
 - `V1_RELEASE_CHECKLIST.md`: Complete verification
 
@@ -140,9 +141,10 @@ All systems operational. All tests pass. Codebase is clean. Documentation is com
 ## RELEASE ARTIFACTS
 
 ### Created Documents
-1. **REPLAY_V1_INVARIANTS.md** (70+ frozen rules, 10 sections)
+1. **WEBLENS_V1_INVARIANTS.md** (70+ frozen rules, 10 sections)
 2. **CHANGE_POLICY.md** (release guidelines, decision tree)
 3. **V1_RELEASE_CHECKLIST.md** (comprehensive verification)
+4. **LICENSE.txt** (Proprietary Free Use Agreement)
 
 ### Updated Documents
 1. **package.json** (version: 1.0.0)
@@ -152,7 +154,7 @@ All systems operational. All tests pass. Codebase is clean. Documentation is com
 ## GIT TAG COMMAND
 
 ```bash
-git tag -a v1.0.0 -m "WebLens v1.0.0: First stable, philosophy-complete release
+git tag -a v1.0.0 -m "WebLens v1.0.0: Free, Proprietary, Local-First Release
 
 This release marks the formal freeze of WebLens v1 invariants:
 - Zero-Code contract enforced
@@ -160,21 +162,23 @@ This release marks the formal freeze of WebLens v1 invariants:
 - Semantic resolution locked
 - TAF explainability complete
 - Scenario isolation implemented
+- Free Proprietary Local Application Posture
 
-All v1 invariants documented in REPLAY_V1_INVARIANTS.md
+All v1 invariants documented in WEBLENS_V1_INVARIANTS.md
 Change control policy defined in CHANGE_POLICY.md
 
-This is a production-ready release suitable for professional use."
+This is a professional-grade local application suitable for personal, educational, and commercial use. See LICENSE.txt for details."
 
 git push origin v1.0.0
 ```
 
 ---
 
-## WHAT REPLAY v1.0.0 DELIVERS
+## WHAT WEBLENS v1.0.0 DELIVERS
 
 ### For Users
 - **Zero-Code Testing**: No selectors, no scripts, just semantic intent
+- **Local Sovereignty**: Runs entirely on your machine. No accounts, no cloud.
 - **Reliable Execution**: Deterministic, repeatable tests
 - **Clear Failures**: Honest error messages, no hidden guessing
 - **Complete Evidence**: TAF system with per-block screenshots

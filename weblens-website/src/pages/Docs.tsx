@@ -232,9 +232,11 @@ const docContent: Record<string, { title: string; subtitle: string; body: React.
     body: (
       <div className="space-y-8">
         <div id="install" className="p-4 border border-border bg-secondary font-mono text-xs scroll-mt-20">
-            <div className="text-muted-foreground mb-2"># Download Binary Bundle</div>
-            <div className="text-success">$ curl -L https://dl.weblens.io/latest -o weblens</div>
-            <div className="text-muted-foreground my-2"># Launch App Mode</div>
+            <div className="text-muted-foreground mb-2"># Pull latest binary from GitHub Releases</div>
+            <div className="text-success">$ wget https://github.com/georgeet15/web-lens/releases/latest/download/weblens</div>
+            <div className="text-muted-foreground my-2"># Grant execution permissions</div>
+            <div className="text-success">$ chmod +x weblens</div>
+            <div className="text-muted-foreground my-2"># Launch Local Application</div>
             <div className="text-success">$ ./weblens</div>
         </div>
         <div id="ci" className="space-y-4 scroll-mt-20">

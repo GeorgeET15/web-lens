@@ -29,9 +29,10 @@
 ### ✅ Documentation
 - [x] `README.md` reflects ONLY implemented features
 - [x] No aspirational language in documentation
-- [x] `REPLAY_V1_INVARIANTS.md` created and comprehensive
+- [x] `WEBLENS_V1_INVARIANTS.md` created and comprehensive
 - [x] `CHANGE_POLICY.md` created with clear guidelines
 - [x] `ARCHITECTURE.md` is accurate and up-to-date
+- [x] `LICENSE.txt` reflects proprietary free-use model
 
 ### ✅ Invariants Documented
 - [x] Zero-Code contract defined
@@ -81,7 +82,7 @@
 ## RELEASE ARTIFACTS
 
 ### Created Documents
-1. **REPLAY_V1_INVARIANTS.md**
+1. **WEBLENS_V1_INVARIANTS.md**
    - 10 sections covering all frozen guarantees
    - 70+ specific invariants
    - Clear enforcement rules
@@ -90,7 +91,12 @@
    - Allowed changes (bug fixes, performance, docs, UI polish)
    - Forbidden changes (breaking schema, changing semantics, etc.)
    - Release process (PATCH, MINOR, MAJOR)
-   - Decision tree for change classification
+    - Decision tree for change classification
+
+3. **LICENSE.txt**
+   - Proprietary free-use model
+   - No redistribution or modification allowed
+   - Standard warranty disclaimers
 
 ### Updated Documents
 1. **package.json**
@@ -111,10 +117,10 @@ This release marks the formal freeze of WebLens v1 invariants:
 - TAF explainability complete
 - Scenario isolation implemented
 
-All v1 invariants documented in REPLAY_V1_INVARIANTS.md
+All v1 invariants documented in WEBLENS_V1_INVARIANTS.md
 Change control policy defined in CHANGE_POLICY.md
 
-This is a production-ready release suitable for professional use."
+This is a professional-grade local application suitable for personal, educational, and commercial use. See LICENSE.txt for details."
 ```
 
 ### Tag Push

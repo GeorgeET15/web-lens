@@ -80,12 +80,14 @@ export function Header() {
               <Moon className="h-4 w-4 text-primary absolute transition-all duration-500 rotate-90 scale-0 dark:rotate-0 dark:scale-100" />
             </button>
           </div>
+
+
           <Button
             size="sm"
             className="h-9 px-5 bg-primary text-white rounded-none text-[11px] font-black tracking-widest hover:bg-primary/90 border-none"
             asChild
           >
-            <Link to="/docs" className="gap-2">
+            <Link to="/flows" className="gap-2">
               INIT_FLOW
               <ChevronRight className="h-3.5 w-3.5" />
             </Link>

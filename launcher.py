@@ -162,7 +162,7 @@ def wait_for_backend(port: int, timeout: int = 20, log_file: Optional[Path] = No
                 return True, None
         except requests.exceptions.RequestException:
             pass
-        time.sleep(0.5)
+        time.sleep(0.1)
     
     return False, "Timed out waiting for health check"
 

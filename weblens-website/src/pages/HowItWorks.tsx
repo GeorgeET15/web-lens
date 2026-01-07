@@ -37,7 +37,7 @@ const theorySteps = [
     ],
     visual: (
        <div className="space-y-3 opacity-80">
-          <AuthenticBlock type="open" intent="Navigate to '/auth/login'" status="success" />
+          <AuthenticBlock type="open" intent="Navigate to '/shop/inventory'" status="success" />
           <AuthenticBlock type="click" intent="Click 'Get Started' button" status="running" />
        </div>
     )

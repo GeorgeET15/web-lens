@@ -47,8 +47,8 @@ export default function Index() {
               </h1>
               
               <p className="text-lg text-muted-foreground leading-relaxed">
-                WebLens is a professional-grade visual testing system that eliminates the selector layer. 
-                No CSS, no XPath, no scripting. Just semantic intent and verifiable visual evidence.
+                WebLens is a free, professional-grade visual testing application that runs entirely on your local machine. 
+                No accounts, no cloud dependency, no scripting. Just semantic intent and verifiable visual evidence.
               </p>
 
               <div className="flex flex-wrap gap-4 pt-2">
@@ -138,7 +138,7 @@ export default function Index() {
               
               <AuthenticBlock 
                 type="open"
-                intent="Open 'https://platform.weblens.io'"
+                intent="Open 'https://local-app.internal'"
                 status="success"
               />
               
@@ -224,19 +224,20 @@ export default function Index() {
       {/* CTA: Deterministic Future */}
       <section className="py-16 bg-secondary border-t border-border">
         <div className="container mx-auto px-6 text-center max-w-4xl space-y-6">
-          <div className="tech-label text-warning tracking-[0.4em]">INIT_ONBOARDING</div>
+          <div className="tech-label text-warning tracking-[0.4em]">SYSTEM_ACCESS</div>
           <h2 className="text-3xl lg:text-4xl font-bold tracking-tighter leading-tight">
             Ready to test <br />with the truth?
           </h2>
           <p className="text-muted-foreground text-sm max-w-lg mx-auto">
-            Stop guessing why your automation broke. WebLens brings determinism to your front-end testing workflow.
+            WebLens is a free local application for all technical personnel. 
+            No accounts, no cloud dependencies. Just pure visual determinism.
           </p>
           <div className="flex justify-center gap-4 pt-4">
             <Button size="sm" className="h-10 px-8 bg-primary hover:bg-primary/90 text-white rounded-none font-bold text-[10px] tracking-widest" asChild>
-              <Link to="/docs">BEGIN_DOCS</Link>
+              <Link to="/flows">ENTER_DASHBOARD</Link>
             </Button>
             <Button size="sm" variant="outline" className="h-10 px-8 border-border rounded-none font-bold hover:bg-secondary text-[10px] tracking-widest" asChild>
-              <Link to="/why-weblens">COMPARE_MODELS</Link>
+              <Link to="/docs">READ_LOGIC</Link>
             </Button>
           </div>
         </div>

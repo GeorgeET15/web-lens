@@ -1,0 +1,36 @@
+WEBLENS SOFTWARE LICENSE AGREEMENT
+Version 1.0
+
+This Software License Agreement ("Agreement") is a legal agreement between you and the creators of WebLens ("Licensor"). By downloading, installing, or using WebLens ("Software"), you agree to be bound by the terms of this Agreement.
+
+1. LICENSE GRANT
+Licensor grants you a personal, worldwide, royalty-free, non-assignable, and non-exclusive license to use the Software for personal, educational, or commercial purposes. You may install and use the Software on any machine you own or control.
+
+2. PROHIBITED USES
+You shall not, and shall not permit others to:
+(a) Redistribute, sell, lease, or sublicense the Software or any portion thereof.
+(b) Modify, adapt, translate, or create derivative works based upon the Software.
+(c) Reverse engineer, decompile, disassemble, or otherwise attempt to derive the source code of the Software.
+(d) Use the Software to build a competing product or service.
+(e) Remove or alter any proprietary notices, labels, or marks on the Software.
+
+3. OWNERSHIP
+The Software is licensed, not sold. Licensor retains all right, title, and interest in and to the Software, including all intellectual property rights therein. WebLens is a proprietary application and is not open source.
+
+4. UPDATES
+Licensor may, from time to time, provide updates or new versions of the Software. Updates are provided at the discretion of the Licensor and are not mandatory. There is no automated or forced update mechanism.
+
+5. FEEDBACK
+If you provide Licensor with any feedback or suggestions regarding the Software, you hereby assign to Licensor all rights in such feedback and agree that Licensor shall have the right to use and fully exploit such feedback and related information in any manner it deems appropriate.
+
+6. DISCLAIMER OF WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+7. LIMITATION OF LIABILITY
+UNDER NO CIRCUMSTANCES SHALL LICENSOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THE SOFTWARE, EVEN IF LICENSOR HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+8. TERMINATION
+This Agreement is effective until terminated. Your rights under this Agreement will terminate automatically without notice from the Licensor if you fail to comply with any term(s) of this Agreement.
+
+9. ENTIRE AGREEMENT
+This Agreement constitutes the entire agreement between you and Licensor regarding the use of the Software and supersedes all prior or contemporaneous understandings regarding such subject matter.

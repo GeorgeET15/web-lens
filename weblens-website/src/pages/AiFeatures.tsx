@@ -19,7 +19,7 @@ export default function AiFeatures() {
           </h1>
           <p className="text-xl text-muted-foreground max-w-xl leading-relaxed">
             WebLens doesn't just match selectors. It understands interface semantics.
-            Our cognitive engine adapts to UI changes in real-time, healing broken tests automatically.
+            Digital intelligence provides deep commentary and draft structures, while leaving execution to deterministic logic.
           </p>
         </div>
       </section>
@@ -36,8 +36,8 @@ export default function AiFeatures() {
               className="w-full border border-border shadow-2xl rounded-sm"
            />
            <div className="flex justify-between items-center mt-4 text-[10px] font-mono opacity-50">
-              <div>SEQ: SELF_HEALING_DEMO_01</div>
-              <div>STATUS: RECOVERED</div>
+              <div>SEQ: FAILURE_INVESTIGATION_01</div>
+              <div>STATUS: ANALYZED</div>
            </div>
          </div>
       </section>

@@ -1,85 +1,48 @@
-# Quick Start Guide
+# WebLens v1.0.0 Quick Start Guide
 
-## Running the Backend
+WebLens is a local-first application. You can run the entire system on your machine using the provided launcher or by starting the backend and frontend separately.
 
-### 1. Install Dependencies
+## 1. Quick Setup (using Launcher)
+
+The easiest way to start WebLens is using the `launcher.py` script.
+
+```bash
+# From the repository root
+python3 launcher.py
+```
+
+This will automatically build and start both the backend (Port 8000) and the frontend (Port 8080).
+
+---
+
+## 2. Advanced: Manual Development Setup
+
+### Backend (Python/FastAPI)
 ```bash
 cd backend
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-### 2. Start the Server
+### Frontend (React/Vite)
 ```bash
-uvicorn main:app --reload
+cd weblens-website
+npm install
+npm run dev -- --port 8080
 ```
 
-The API will be available at `http://localhost:8000`
+---
 
-### 3. Test with Example Flow
-```bash
-# In another terminal
-curl -X POST http://localhost:8000/api/flows/execute \
-  -H "Content-Type: application/json" \
-  -d '{
-    "flow": '$(cat ../examples/login-test.json)',
-    "headless": true
-  }'
-```
+## 3. Example Flow Structure (Semantic Intent)
 
-## API Endpoints
-
-### Get Block Types
-```bash
-curl http://localhost:8000/api/blocks/types
-```
-
-### Validate Flow
-```bash
-curl -X POST http://localhost:8000/api/flows/validate \
-  -H "Content-Type: application/json" \
-  -d @../examples/login-test.json
-```
-
-### Execute Flow
-```bash
-curl -X POST http://localhost:8000/api/flows/execute \
-  -H "Content-Type: application/json" \
-  -d '{
-    "flow": '$(cat ../examples/login-test.json)',
-    "headless": true
-  }'
-```
-
-## Using Docker
-
-### Build and Run
-```bash
-# From project root
-docker-compose up --build
-```
-
-### Access Services
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
-- Frontend: http://localhost:5173 (when implemented)
-
-## Testing
-
-### Run Backend Tests
-```bash
-cd backend
-source venv/bin/activate
-python test_backend.py
-```
-
-## Example Flow Structure
+WebLens uses **Semantic Element Capture** instead of CSS/XPath selectors. Below is a compliant Flow JSON:
 
 ```json
 {
-  "name": "My Test Flow",
-  "description": "Optional description",
+  "name": "Search Test",
+  "description": "Verifies search functionality on example.com",
   "entry_block": "block_1",
   "blocks": [
     {
@@ -91,42 +54,37 @@ python test_backend.py
     {
       "id": "block_2",
       "type": "click_element",
-      "selector": "#button",
-      "selector_type": "css",
+      "target_intent": {
+        "role": "button",
+        "name": "Search",
+        "structuralIntent": "primary_action"
+      },
       "next_block": null
     }
   ]
 }
 ```
 
-## Common Issues
+---
 
-### Chrome/ChromeDriver Issues
-If you get browser errors, ensure Chrome is installed:
+## 4. Common Troubleshooting
+
+### Chrome/ChromeDriver
+WebLens uses Selenium for deterministic browser control. Ensure Google Chrome is installed on your host.
+
 ```bash
 # Ubuntu/Debian
 sudo apt-get install google-chrome-stable
-
-# Or use Docker which includes Chrome
-docker-compose up
 ```
 
-### Python Environment Issues
-Always activate the virtual environment:
-```bash
-cd backend
-source venv/bin/activate
-```
+### Permissions
+Since WebLens runs tests locally, ensure it has permission to write to its `environments/` and `executions/` directories.
 
-## Next Steps
+---
 
-1. **Frontend**: Integrate Blockly editor using `frontend/blockly-blocks.json`
-2. **Serialization**: Use `frontend/src/utils/block-serializer.ts` to convert blocks to JSON
-3. **API Integration**: Call `/api/flows/execute` with serialized flow
-4. **Display Results**: Show execution logs and status to users
+## 5. Documentation Links
 
-## Documentation
-
-- [Architecture](../ARCHITECTURE.md) - System design and extension guide
-- [README](../README.md) - Project overview
-- [API Docs](http://localhost:8000/docs) - Interactive API documentation (when server is running)
+- [README](../README.md) - System overview and License
+- [Architecture](ARCHITECTURE.md) - High-level system design
+- [Invariants](WEBLENS_V1_INVARIANTS.md) - Frozen v1 rules
+- [API Docs](http://localhost:8000/docs) - Interactive API reference (Requires running backend)

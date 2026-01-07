@@ -70,16 +70,13 @@ export const ExecutionExplorer: React.FC<Props> = ({
                 <DownloadDropdown runId={report.run_id} type="execution" />
                 <button 
                   onClick={() => {
-                    const url = `${window.location.origin}${window.location.pathname}?report=${report.run_id}`;
-                    navigator.clipboard.writeText(url);
-                    // We'll rely on the parent or a custom toast to show success if possible, 
-                    // but for now we'll assume it's copied. 
-                    // (I'll add a simple notification if I can access the addToast function)
+                    const finalUrl = `${window.location.origin}${window.location.pathname}?report=${report.run_id}`;
+                    navigator.clipboard.writeText(finalUrl);
                     if ((window as any).addToast) {
                        (window as any).addToast('success', 'Share link copied to clipboard!');
                     }
                   }}
-                  className="px-2 py-1 bg-white/5 border border-white/10 rounded text-[8px] font-black uppercase tracking-widest text-white hover:bg-white/10 transition-all active:scale-95 flex items-center gap-1.5"
+                  className="px-2 py-1 bg-white/5 border border-border rounded text-[8px] font-black uppercase tracking-widest text-white hover:bg-white/10 transition-all active:scale-95 flex items-center gap-1.5"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />

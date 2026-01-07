@@ -62,6 +62,13 @@ a = Analysis(
         'google.generativeai',
         'langchain_core',
         'langchain_core.language_models.chat_models',
+        
+        # Additional dependencies
+        'reportlab',
+        'dotenv',
+        'requests',
+        'fastapi.staticfiles',
+        'jinja2',
     ],
     hookspath=[],
     hooksconfig={},
@@ -86,24 +93,31 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='weblens',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,  # Compress executable
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=False,  # No console window (GUI mode)
+    upx=False,  # Disable compression for faster launch
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
     icon=icon_file,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name='weblens',
 )
 
 # macOS app bundle

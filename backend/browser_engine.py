@@ -607,7 +607,7 @@ class SeleniumEngine(BrowserEngine):
         # 2. Font Guard
         try:
             # Short timeout for fonts as they might take forever on slow connections
-            self.driver.execute_script("return document.fonts.ready", timeout=2)
+            self.driver.execute_script("return document.fonts.ready", timeout=0.5)
         except Exception:
             pass
 
@@ -632,8 +632,8 @@ class SeleniumEngine(BrowserEngine):
 
         let lastPositions = getPositions();
         let stableCount = 0;
-        const requiredSamples = 3;
-        const interval = 100;
+        const requiredSamples = 2; // Reduced from 3
+        const interval = 50; // Reduced from 100
         const startTime = Date.now();
 
         const check = () => {

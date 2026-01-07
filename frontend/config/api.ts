@@ -5,6 +5,7 @@ export const API_ENDPOINTS = {
   EXECUTE: 'http://localhost:8000/api/execute/start',
   STATUS: 'http://localhost:8000/api/status',
   EXECUTIONS: 'http://localhost:8000/api/executions',
+  CLOUD_PUBLISH: (runId: string) => `http://localhost:8000/api/executions/${runId}/publish`,
   REPORTS: 'http://localhost:8000/api/reports',
   
   // Flow Validation

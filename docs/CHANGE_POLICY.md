@@ -289,7 +289,7 @@ MAJOR.MINOR.PATCH
 ### MAJOR Release (v2.0.0)
 1. Document breaking changes
 2. Provide migration guide
-3. Update `REPLAY_V1_INVARIANTS.md` → `REPLAY_V2_INVARIANTS.md`
+3. Update `WEBLENS_V1_INVARIANTS.md` → `WEBLENS_V2_INVARIANTS.md`
 4. Run full test suite
 5. Tag release: `v2.0.0`
 
@@ -321,7 +321,7 @@ This policy is BINDING. Any v1.x release that violates these rules must be:
 3. Documented in a post-mortem
 
 For questions or exceptions, consult:
-- `REPLAY_V1_INVARIANTS.md` (Frozen Guarantees)
+- `WEBLENS_V1_INVARIANTS.md` (Frozen Guarantees)
 - `README.md` (Core Philosophy)
 - Project maintainers
 

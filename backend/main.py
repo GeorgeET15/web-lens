@@ -26,6 +26,14 @@ from threading import Thread
 from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
 
+class CachedStaticFiles(StaticFiles):
+    """Custom StaticFiles handler to add Cache-Control headers."""
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        # Add aggressive caching for bundled assets
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
 import config
 
 # Load environment variables from .env file
@@ -1177,6 +1185,9 @@ async def list_executions():
     return sorted_executions[:50]
 
 
+# Cloud publishing endpoint removed in pivot to free model
+
+
 @app.get("/api/environments", response_model=List[EnvironmentConfig])
 async def list_environments():
     """List all available environments."""
@@ -2082,7 +2093,7 @@ except AttributeError:
 
 if frontend_dir.exists():
     logger.info(f"Serving static files from {frontend_dir.absolute()}")
-    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+    app.mount("/", CachedStaticFiles(directory=str(frontend_dir), html=True), name="frontend")
 else:
     logger.warning(f"Frontend directory not found at {frontend_dir.absolute()}. UI will not load.")
 
