@@ -42,8 +42,9 @@ from taf import TAFRegistry
 class InterpreterContext:
     """Maintains execution state during flow execution."""
     
-    def __init__(self, run_id: str, initial_variables: Optional[Dict[str, str]] = None, scenario_name: Optional[str] = None, flow_name: Optional[str] = None):
+    def __init__(self, run_id: str, flow_id: Optional[str] = None, initial_variables: Optional[Dict[str, str]] = None, scenario_name: Optional[str] = None, flow_name: Optional[str] = None):
         self.run_id = run_id
+        self.flow_id = flow_id
         self.variables: Dict[str, Any] = {}
         self.loop_counters: Dict[str, int] = {}
         self.executed_blocks: List[str] = []
@@ -57,6 +58,7 @@ class InterpreterContext:
         # Execution Insight Report
         self.report = ExecutionReport(
             run_id=run_id,
+            flow_id=flow_id,
             flow_name=flow_name,
             scenario_name=scenario_name,
             started_at=time.time(),
@@ -313,6 +315,7 @@ class BlockInterpreter:
         import uuid
         self.context = InterpreterContext(
             run_id=run_id or str(uuid.uuid4()), 
+            flow_id=getattr(flow, 'id', None),
             initial_variables=initial_variables, 
             scenario_name=scenario_name,
             flow_name=flow.name
@@ -322,6 +325,7 @@ class BlockInterpreter:
         try:
             self._execute_block(flow.entry_block, flow)
             self.context.report.finished_at = time.time()
+            self.context.report.duration_ms = (self.context.report.finished_at - self.context.report.started_at) * 1000
             self.context.report.success = True
             return ExecutionResult(
                 success=True,
@@ -373,6 +377,7 @@ class BlockInterpreter:
             )
 
             self.context.report.finished_at = time.time()
+            self.context.report.duration_ms = (self.context.report.finished_at - self.context.report.started_at) * 1000
             self.context.report.success = False
             self.context.report.error = user_error
 
@@ -420,6 +425,7 @@ class BlockInterpreter:
                 user_error.related_block_id = self.context.executed_blocks[-1] if self.context.executed_blocks else None
 
             self.context.report.finished_at = time.time()
+            self.context.report.duration_ms = (self.context.report.finished_at - self.context.report.started_at) * 1000
             self.context.report.success = False
             self.context.report.error = user_error
 
@@ -445,6 +451,7 @@ class BlockInterpreter:
             self.context.log(f" {error_msg}")
             
             self.context.report.finished_at = time.time()
+            self.context.report.duration_ms = (self.context.report.finished_at - self.context.report.started_at) * 1000
             self.context.report.success = False
 
             return ExecutionResult(

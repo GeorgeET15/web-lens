@@ -9,3 +9,4 @@ langchain-google-genai==0.0.5
 python-dotenv==1.2.1
 httpx==0.26.0
 weasyprint>=60.0
+supabase>=2.3.0

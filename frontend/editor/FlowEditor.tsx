@@ -22,9 +22,10 @@ import {
 
 import type { FlowGraph } from '../types/flow';
 import { BaseBlock, BaseBlockOverlay } from './blocks/BaseBlock';
-import { Plus, Minus, Save, FolderOpen, Trash2, X, LocateFixed, Sparkles } from 'lucide-react';
+import { Plus, Minus, Save, FolderOpen, Trash2, X, LocateFixed, Sparkles, Globe, Laptop } from 'lucide-react';
 import { FlowStorage, SavedFlowMetadata } from '../lib/storage';
 import { OnboardingModal } from '../components/OnboardingModal';
+import { supabase } from '../lib/supabase';
 import { Minimap } from './Minimap';
 import { SnapGuides } from './SnapGuides';
 import { FlowTransformer } from '../lib/flow-transformer';
@@ -34,6 +35,7 @@ import { EditorBlock, BlockType, SavedValue, ScenarioSuiteReport } from './entit
 import { ScenarioSuiteDashboard } from '../components/execution/ScenarioSuiteDashboard';
 import { AICopilotPanel } from '../components/ai/AICopilotPanel';
 import { cn } from '../lib/utils';
+import { Skeleton } from '../components/Skeleton';
 import { DEFAULT_BLOCKS } from './constants';
 
 export interface FlowEditorRef {
@@ -54,6 +56,8 @@ export const LAYOUT_CONSTANTS = {
     GRID_SIZE: 20
 };
 
+import { ExecutionReport } from '../types/execution';
+
 interface FlowEditorProps {
   onFlowChange?: (flow: FlowGraph | null) => void;
   onValidationError?: (errors: string[]) => void;
@@ -63,6 +67,7 @@ interface FlowEditorProps {
   showOnboarding?: boolean;
   setShowOnboarding?: (show: boolean) => void;
   onViewScenario?: (runId: string) => void;
+  lastReport?: ExecutionReport | null;
 }
 
 
@@ -208,6 +213,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
     // State for blocks
     const [blocks, setBlocks] = useState<EditorBlock[]>([]);
     const [flowName, setFlowName] = useState('My Test Flow');
+    const [flowDescription, setFlowDescription] = useState<string>('');
     const [currentFlowId, setCurrentFlowId] = useState<string | null>(null);
     const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
     const [isSidebarOpen] = useState(true); 
@@ -220,6 +226,8 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
     const [showAiReview, setShowAiReview] = useState(false);
     const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
     const [savedFlows, setSavedFlows] = useState<SavedFlowMetadata[]>([]);
+    const [isLoadingSavedFlows, setIsLoadingSavedFlows] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
     
     // Block search
     const [blockSearchQuery, setBlockSearchQuery] = useState('');
@@ -230,7 +238,11 @@ const [dialogConfig, setDialogConfig] = useState<{
     message: string;
     confirmLabel?: string;
     cancelLabel?: string;
+    secondaryLabel?: string;
+    tertiaryLabel?: string;
     onConfirm: () => void;
+    onSecondary?: () => void;
+    onTertiary?: () => void;
     isDestructive?: boolean;
     showCancel?: boolean;
 }>({
@@ -719,27 +731,111 @@ const [dialogConfig, setDialogConfig] = useState<{
     
     // --- Persistence Handlers ---
 
-    const handleSave = () => {
-        try {
-            const flow = FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets);
-            const saved = FlowStorage.save(flow, currentFlowId || undefined);
-            setCurrentFlowId(saved.id);
-        } catch (e) {
-            console.error(e);
-            if ((window as any).addToast) {
-                (window as any).addToast('error', 'Failed to save flow');
-            }
+    const handleSave = async () => {
+        const session = await supabase.auth.getSession();
+        
+        if (session.data.session) {
+            setDialogConfig({
+                isOpen: true,
+                title: 'Save Flow',
+                message: 'Where would you like to save this flow?',
+                confirmLabel: 'Cloud Storage',
+                secondaryLabel: 'Local Storage',
+                cancelLabel: 'Cancel',
+                onConfirm: () => {
+                    performSave('cloud');
+                    setDialogConfig(prev => ({ ...prev, isOpen: false }));
+                },
+                onSecondary: () => {
+                    performSave('local');
+                    setDialogConfig(prev => ({ ...prev, isOpen: false }));
+                }
+            });
+        } else {
+            performSave('local');
         }
     };
 
-    const handleOpenLoadModal = () => {
-        setSavedFlows(FlowStorage.list());
-        setIsLoadModalOpen(true);
+    const performSave = async (location: 'local' | 'cloud') => {
+        setIsProcessing(true);
+        try {
+            const flow = FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, 1, currentFlowId || undefined, flowDescription);
+            
+            if (location === 'cloud') {
+                const cloudRes = await FlowStorage.saveCloud(flow);
+                if (cloudRes) {
+                    setCurrentFlowId(cloudRes.id);
+                    if ((window as any).addToast) (window as any).addToast('success', 'Flow saved to cloud');
+                }
+            } else {
+                const saved = FlowStorage.save(flow, currentFlowId || undefined);
+                setCurrentFlowId(saved.id);
+                if ((window as any).addToast) (window as any).addToast('success', 'Flow saved locally');
+            }
+        } catch (e) {
+            console.error(e);
+            if ((window as any).addToast) {
+                (window as any).addToast('error', `Failed to save flow to ${location}`);
+            }
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
-    const handleLoadFlow = (id: string, isTemplate: boolean = false) => {
-        const flow = isTemplate ? id as any : FlowStorage.load(id); 
-        // Hack: reused function for template requiring flow object
+    const handleOpenLoadModal = async () => {
+        setIsLoadModalOpen(true);
+        setIsLoadingSavedFlows(true);
+        
+        try {
+            const local = FlowStorage.list();
+            const cloud = await FlowStorage.listCloud();
+            
+            // Deduplicate and Merge
+            const mergedMap = new Map<string, any>();
+            
+            cloud.forEach(f => {
+                mergedMap.set(f.id, { 
+                    ...f, 
+                    sources: ['cloud'],
+                    primarySource: 'cloud'
+                });
+            });
+            
+            local.forEach(f => {
+                if (mergedMap.has(f.id)) {
+                    const existing = mergedMap.get(f.id);
+                    existing.sources.push('local');
+                } else {
+                    mergedMap.set(f.id, { 
+                        ...f, 
+                        sources: ['local'],
+                        primarySource: 'local'
+                    });
+                }
+            });
+            
+            setSavedFlows(Array.from(mergedMap.values()));
+        } finally {
+            setIsLoadingSavedFlows(false);
+        }
+    };
+
+    const handleLoadFlow = async (id: string, isTemplate: boolean = false, source?: 'local' | 'cloud') => {
+        let flow: FlowGraph | null = null;
+        setIsProcessing(true);
+        
+        try {
+            if (isTemplate) {
+                flow = id as any;
+            } else if (source === 'cloud') {
+                flow = await FlowStorage.loadCloud(id);
+            } else {
+                flow = FlowStorage.load(id);
+            }
+        } finally {
+            setIsProcessing(false);
+        }
+
         if (!flow) return;
         
         if (blocks.length > 2) { 
@@ -762,7 +858,7 @@ const [dialogConfig, setDialogConfig] = useState<{
     const performLoad = (flow: FlowGraph, id: string, isTemplate: boolean) => {
 
         try {
-            const { blocks: newBlocks, name, variables, scenarioSets: newSets, schemaVersion } = FlowTransformer.toEditorState(flow);
+            const { blocks: newBlocks, name, variables, scenarioSets: newSets, schemaVersion, description } = FlowTransformer.toEditorState(flow);
             console.log('[FlowEditor] Loaded flow:', name, 'Schema:', schemaVersion);
             
             // Architectural Refinement: Orphan Cleanup
@@ -772,6 +868,7 @@ const [dialogConfig, setDialogConfig] = useState<{
             
             setBlocks(cleanedBlocks);
             setFlowName(name);
+            setFlowDescription(description || '');
             setGlobalVariables(variables);
             setScenarioSets(newSets || []);
             setSchemaVersion(schemaVersion);
@@ -800,6 +897,7 @@ const [dialogConfig, setDialogConfig] = useState<{
         const performReset = () => {
             setBlocks([{ id: `block_${crypto.randomUUID()}`, ...DEFAULT_BLOCKS.open_page }]);
             setFlowName('My Test Flow');
+            setFlowDescription('');
             setGlobalVariables([]);
             setCurrentFlowId(null);
             setDialogConfig(prev => ({ ...prev, isOpen: false }));
@@ -836,6 +934,7 @@ const [dialogConfig, setDialogConfig] = useState<{
                     setCurrentFlowId(null);
                     setBlocks([{ id: `block_${crypto.randomUUID()}`, ...DEFAULT_BLOCKS.open_page }]);
                     setFlowName('My Test Flow');
+                    setFlowDescription('');
                     setGlobalVariables([]);
                     setDialogConfig(prev => ({ ...prev, isOpen: false }));
                 }
@@ -1410,33 +1509,89 @@ const [dialogConfig, setDialogConfig] = useState<{
                     </div>
                     
                     <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-zinc-950/50">
-                        {savedFlows.length === 0 ? (
+                        {isLoadingSavedFlows ? (
+                            <div className="space-y-2">
+                                {Array.from({ length: 5 }).map((_, i) => (
+                                    <div key={i} className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <Skeleton className="h-3 w-32 rounded-full" />
+                                            <Skeleton className="h-4 w-16 rounded-full" />
+                                        </div>
+                                        <Skeleton className="h-2 w-24 rounded-full opacity-50" />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : savedFlows.length === 0 ? (
                             <div className="text-center py-12 text-zinc-600 text-[10px] font-black uppercase tracking-widest italic opacity-50">No saved flows available</div>
                         ) : (
                             savedFlows.map(f => (
-                                <div key={f.id} className="flex items-center justify-between p-4 rounded-xl hover:bg-white/5 group border border-transparent hover:border-white/10 transition-all cursor-pointer shadow-sm active:scale-[0.98]" onClick={() => handleLoadFlow(f.id)}>
+                                <div key={f.id} className="flex items-center justify-between p-4 rounded-xl hover:bg-white/5 group border border-transparent hover:border-white/10 transition-all cursor-pointer shadow-sm active:scale-[0.98]" onClick={() => handleLoadFlow(f.id, false, (f as any).primarySource)}>
                                     <div className="flex-1 min-w-0">
-                                        <div className="text-[11px] font-black uppercase tracking-widest text-zinc-300 group-hover:text-white transition-colors truncate">{f.name}</div>
-                                        <div className="text-[9px] font-bold text-zinc-600 mt-1 uppercase tracking-tight">{new Date(f.updatedAt).toLocaleString()}</div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <div className="text-[11px] font-black uppercase tracking-widest text-zinc-300 group-hover:text-white transition-colors truncate">{f.name}</div>
+                                            <div className="flex gap-1">
+                                                {(f as any).sources?.includes('cloud') && (
+                                                    <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-black uppercase tracking-widest border border-indigo-500/20">
+                                                        <Globe className="w-2.5 h-2.5" />
+                                                        Cloud
+                                                    </span>
+                                                )}
+                                                {(f as any).sources?.includes('local') && (
+                                                    <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-500/10 text-zinc-500 text-[8px] font-black uppercase tracking-widest border border-zinc-500/20">
+                                                        <Laptop className="w-2.5 h-2.5" />
+                                                        Local
+                                                    </span>
+                                                )}
+                                                {!(f as any).sources && (f.source === 'cloud' ? (
+                                                     <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-black uppercase tracking-widest border border-indigo-500/20">
+                                                        <Globe className="w-2.5 h-2.5" />
+                                                        Cloud
+                                                    </span>
+                                                ) : (
+                                                    <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-500/10 text-zinc-500 text-[8px] font-black uppercase tracking-widest border border-zinc-500/20">
+                                                        <Laptop className="w-2.5 h-2.5" />
+                                                        Local
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="text-[9px] font-bold text-zinc-600 uppercase tracking-tight">{new Date(f.updatedAt).toLocaleString()}</div>
                                     </div>
                                     <button 
-                                        onClick={(e) => {
+                                        onClick={async (e) => {
                                             e.stopPropagation();
                                             setDialogConfig({
                                                 isOpen: true,
                                                 title: 'Delete Flow',
-                                                message: `Permanentely delete "${f.name}"?`,
-                                                confirmLabel: 'Delete',
+                                                message: `How would you like to delete "${f.name}"?`,
+                                                confirmLabel: (f as any).sources?.length > 1 ? 'Delete Everywhere' : 'Delete',
+                                                secondaryLabel: (f as any).sources?.includes('cloud') && (f as any).sources?.includes('local') ? 'Delete from Cloud' : undefined,
+                                                tertiaryLabel: (f as any).sources?.includes('cloud') && (f as any).sources?.includes('local') ? 'Delete Locally' : undefined,
                                                 isDestructive: true,
-                                                onConfirm: () => {
-                                                    FlowStorage.delete(f.id);
-                                                    setSavedFlows(FlowStorage.list());
+                                                onConfirm: async () => {
+                                                    const sources = (f as any).sources || [f.source];
+                                                    if (sources.includes('cloud')) {
+                                                        await FlowStorage.deleteCloud(f.id);
+                                                    }
+                                                    if (sources.includes('local')) {
+                                                        FlowStorage.delete(f.id);
+                                                    }
                                                     setDialogConfig(prev => ({ ...prev, isOpen: false }));
+                                                    await handleOpenLoadModal();
+                                                },
+                                                onSecondary: async () => {
+                                                    await FlowStorage.deleteCloud(f.id);
+                                                    setDialogConfig(prev => ({ ...prev, isOpen: false }));
+                                                    await handleOpenLoadModal();
+                                                },
+                                                onTertiary: async () => {
+                                                    FlowStorage.delete(f.id);
+                                                    setDialogConfig(prev => ({ ...prev, isOpen: false }));
+                                                    await handleOpenLoadModal();
                                                 }
                                             });
                                         }}
-                                        className="p-2 text-zinc-800 hover:text-white opacity-0 group-hover:opacity-100 transition-all"
-                                        title="Delete Flow"
+                                        className="p-2.5 rounded-lg text-zinc-600 hover:text-rose-500 hover:bg-rose-500/10 transition-all opacity-0 group-hover:opacity-100"
                                     >
                                         <Trash2 className="w-4 h-4" />
                                     </button>
@@ -1488,6 +1643,16 @@ const [dialogConfig, setDialogConfig] = useState<{
                 onClose={() => setShowAiReview(false)}
             />
         </div>
+
+        {/* Action Loading Overlay */}
+        {isProcessing && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-[2px] animate-in fade-in duration-200">
+                <div className="bg-zinc-900/80 border border-white/10 rounded-2xl p-6 flex flex-col items-center gap-4 shadow-2xl">
+                    <div className="w-10 h-10 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white animate-pulse">Processing...</span>
+                </div>
+            </div>
+        )}
         
         </div> {/* End Main Content Area Wrapper */}
 

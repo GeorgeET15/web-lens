@@ -3,6 +3,7 @@ import { FileDown, Upload, Play, AlertCircle, Save, Layers, Trash2 } from 'lucid
 import { API_ENDPOINTS } from '../config/api';
 import { Scenario, ScenarioSet, ScenarioSuiteReport } from '../editor/entities';
 import { ExecutionStatusModal } from './execution/ExecutionStatusModal';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ScenarioPanelProps {
     flowJson: any;
@@ -15,6 +16,9 @@ export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({
     onExecutionComplete,
     onUpdateFlow 
 }) => {
+    const { session } = useAuth();
+    const token = session?.access_token;
+    
     const [scenarios, setScenarios] = useState<Scenario[]>([]);
     const [setName, setSetName] = useState('');
     const [isSavingSet, setIsSavingSet] = useState(false);
@@ -31,7 +35,10 @@ export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({
         try {
             const response = await fetch(API_ENDPOINTS.SCENARIOS_DOWNLOAD_TEMPLATE, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
                 body: JSON.stringify(flowJson)
             });
 
@@ -71,6 +78,9 @@ export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({
 
             const response = await fetch(API_ENDPOINTS.SCENARIOS_VALIDATE, {
                 method: 'POST',
+                headers: {
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
                 body: formData
             });
 
@@ -99,7 +109,10 @@ export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({
         try {
             const response = await fetch(API_ENDPOINTS.SCENARIOS_EXECUTE, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
                 body: JSON.stringify({
                     flow: flowJson,
                     scenarios: scenarios
@@ -130,7 +143,10 @@ export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({
         try {
             const response = await fetch(`${API_ENDPOINTS.BASE_URL}/api/flows/update-with-set`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
                 body: JSON.stringify({
                     flow: flowJson,
                     set_name: setName,

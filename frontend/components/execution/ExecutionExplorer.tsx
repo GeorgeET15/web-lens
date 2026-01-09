@@ -6,7 +6,7 @@ import { InsightPanel } from './InsightPanel';
 import { DownloadDropdown } from '../DownloadDropdown';
 import { ExecutionList } from './ExecutionList';
 import { API_ENDPOINTS } from '../../config/api';
-import { Terminal, X, History, ChevronLeft } from 'lucide-react';
+import { Terminal, X, History, ChevronLeft, Share2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface Props {
@@ -152,16 +152,17 @@ export const ExecutionExplorer: React.FC<Props> = ({
                         <div className="flex items-center gap-1.5">
                             <DownloadDropdown runId={activeReport.run_id} type="execution" />
                             <button 
-                            onClick={() => {
-                                const finalUrl = `${window.location.origin}${window.location.pathname}?report=${activeReport.run_id}`;
-                                navigator.clipboard.writeText(finalUrl);
-                                if ((window as any).addToast) {
-                                (window as any).addToast('success', 'Share link copied to clipboard!');
-                                }
-                            }}
-                            className="px-2 py-1 bg-white/5 border border-border rounded text-[8px] font-black uppercase tracking-widest text-white hover:bg-white/10 transition-all active:scale-95 flex items-center gap-1.5"
+                                onClick={() => {
+                                    const finalUrl = `${window.location.origin}${window.location.pathname}?report=${activeReport.run_id}`;
+                                    navigator.clipboard.writeText(finalUrl);
+                                    if ((window as any).addToast) {
+                                        (window as any).addToast('success', 'Live share link copied!');
+                                    }
+                                }}
+                                className="px-2 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded text-[8px] font-black uppercase tracking-widest text-indigo-400 hover:bg-indigo-500/20 transition-all active:scale-95 flex items-center gap-1.5"
                             >
-                            Share
+                                <Share2 className="w-3 h-3" />
+                                Share
                             </button>
                         </div>
                     </div>

@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { Layers, Play, AlertTriangle, Terminal, Loader2, X, Sparkles } from 'lucide-react';
+import { 
+  Layers, Play, AlertTriangle, Terminal, Loader2, X, Sparkles,
+  Globe, Settings2, Plus, User
+} from 'lucide-react';
 import type { StreamEvent } from './types/events';
 import { API_ENDPOINTS } from './config/api';
 import { parseError, type EnrichedError } from './lib/error-parser';
@@ -11,13 +14,15 @@ import { ExecutionExplorer } from './components/execution/ExecutionExplorer';
 import { ExecutionReport } from './types/execution';
 import { Environment } from './types/environment';
 import { EnvironmentManager } from './components/EnvironmentManager';
-import { Globe, Settings2, Plus } from 'lucide-react';
 import { ToastContainer, type ToastType } from './components/Toast';
 import { CustomDropdown } from './components/CustomDropdown';
 import { clsx } from 'clsx';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import Login from './pages/Login';
+import Settings from './pages/Settings';
 
-
-function App() {
+function Dashboard() {
+  const { session } = useAuth();
   const [currentFlow, setCurrentFlow] = useState<FlowGraph | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
@@ -28,10 +33,12 @@ function App() {
   const [executionReport, setExecutionReport] = useState<ExecutionReport | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [isExplorerOpen, setIsExplorerOpen] = useState(false);
+  const [view, setView] = useState<'editor' | 'settings'>('editor');
   const [explorerHeight, setExplorerHeight] = useState(40);
   const [isResizing, setIsResizing] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [isLoadingEnvs, setIsLoadingEnvs] = useState(false);
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<string>('');
   const [isEnvManagerOpen, setIsEnvManagerOpen] = useState(false);
   const [toasts, setToasts] = useState<any[]>([]);
@@ -66,6 +73,23 @@ function App() {
            setExecutionReport(report);
            setIsExplorerOpen(true);
            setExplorerHeight(window.innerHeight - 56); // Full height minus header
+
+           // If NOT finished, connect to stream to make it "LIVE"
+           if (!report.finished_at) {
+                const streamUrl = `${API_ENDPOINTS.STATUS}/${reportId}`;
+                const es = new EventSource(streamUrl);
+                es.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'block_execution' || data.type === 'execution_complete') {
+                        // Re-fetch report to get latest structured state
+                        fetchExecutionReport(reportId);
+                    }
+                    if (data.type === 'execution_complete') {
+                        es.close();
+                    }
+                };
+                eventSourceRef.current = es;
+           }
         } else {
            addToast('error', 'Failed to load shared report');
         }
@@ -76,17 +100,17 @@ function App() {
   };
 
   const fetchEnvironments = async () => {
+    setIsLoadingEnvs(true);
     try {
       const resp = await fetch(API_ENDPOINTS.ENVIRONMENTS);
       if (resp.ok) {
         const data = await resp.json();
         setEnvironments(data);
-        if (data.length > 0 && !selectedEnvironmentId) {
-          // setSelectedEnvironmentId(data[0].id); // Don't auto-select to allow local by default
-        }
       }
     } catch (err) {
       console.error('Failed to fetch environments:', err);
+    } finally {
+      setIsLoadingEnvs(false);
     }
   };
 
@@ -266,10 +290,15 @@ function App() {
 
       const entryBlockId = rootBlock.id;
 
+      const token = session?.access_token;
+
       // Start execution with the FULL flow
       const response = await fetch(API_ENDPOINTS.EXECUTE, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
              flow: { ...currentFlow, entry_block: entryBlockId },
              headless: false,
@@ -424,6 +453,15 @@ function App() {
                   <Settings2 className="w-3.5 h-3.5" />
                 </button>
 
+                {/* Profile / Settings Button */}
+                <button 
+                  onClick={() => setView('settings')}
+                  className={`p-2 border rounded-lg transition-all ${view === 'settings' ? 'bg-white text-black border-white' : 'bg-white/5 border-white/5 text-zinc-600 hover:text-white hover:border-white/20'}`}
+                  title="Profile & Settings"
+                >
+                  <User className="w-3.5 h-3.5" />
+                </button>
+
                 <div className="h-6 w-[1px] bg-white/10" />
 
                 {/* Library / Status / Actions */}
@@ -502,26 +540,38 @@ function App() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-hidden flex flex-col relative">
-        <div className={clsx("flex-1 overflow-hidden h-full", isViewerMode && "hidden")}>
-            <FlowEditor 
-              ref={blockEditorRef}
-              onFlowChange={setCurrentFlow}
-              onValidationError={(errors) => {
-                if (errors.length > 0) console.warn('Errors:', errors);
-              }}
-              onRequestPick={handleStartPicking}
-              highlightBlockId={selectedBlockId}
-              onBlockClick={(id) => setSelectedBlockId(id)}
-              showOnboarding={showOnboarding}
-              setShowOnboarding={setShowOnboarding}
-              onViewScenario={(runId) => {
-                fetchExecutionReport(runId);
-                setIsExplorerOpen(true);
-                setExplorerHeight(400); // Automatically uncollapse
-              }}
-              lastReport={executionReport}
-            />
-        </div>
+        {view === 'settings' ? (
+             <div className="flex-1 overflow-auto">
+                 {/* Back Button */}
+                 <div className="absolute top-6 left-6 z-50">
+                    <button onClick={() => setView('editor')} className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors text-xs font-bold uppercase tracking-widest">
+                       &larr; Back to Editor
+                    </button>
+                 </div>
+                 <Settings />
+             </div>
+        ) : (
+            <div className={clsx("flex-1 overflow-hidden h-full", isViewerMode && "hidden")}>
+                <FlowEditor 
+                ref={blockEditorRef}
+                onFlowChange={setCurrentFlow}
+                onValidationError={(errors) => {
+                    if (errors.length > 0) console.warn('Errors:', errors);
+                }}
+                onRequestPick={handleStartPicking}
+                highlightBlockId={selectedBlockId}
+                onBlockClick={(id) => setSelectedBlockId(id)}
+                showOnboarding={showOnboarding}
+                setShowOnboarding={setShowOnboarding}
+                onViewScenario={(runId) => {
+                    fetchExecutionReport(runId);
+                    setIsExplorerOpen(true);
+                    setExplorerHeight(400); // Automatically uncollapse
+                }}
+                lastReport={executionReport}
+                />
+            </div>
+        )}
 
         {/* Compact Status Indicator (During Runtime) */}
         {isRunning && (
@@ -653,6 +703,7 @@ function App() {
         isOpen={isEnvManagerOpen}
         onClose={() => setIsEnvManagerOpen(false)}
         environments={environments}
+        isLoading={isLoadingEnvs}
         onAdd={handleAddEnvironment}
         onDelete={handleDeleteEnvironment}
       />
@@ -662,4 +713,31 @@ function App() {
   );
 }
 
-export default App
+function AuthGuard({ children }: { children: React.ReactNode }) {
+    const { user, loading } = useAuth();
+    
+    // PUBLIC ACCESS: Allow viewing shared reports without login
+    const params = new URLSearchParams(window.location.search);
+    const isSharedReport = params.has('report');
+
+    if (loading) return (
+        <div className="h-screen bg-black flex flex-col items-center justify-center gap-4">
+            <Loader2 className="w-8 h-8 animate-spin text-white" />
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Authenticating</p>
+        </div>
+    );
+
+    if (!user && !isSharedReport) return <Login />;
+    
+    return <>{children}</>;
+}
+
+export default function App() {
+    return (
+        <AuthProvider>
+            <AuthGuard>
+                <Dashboard />
+            </AuthGuard>
+        </AuthProvider>
+    );
+}

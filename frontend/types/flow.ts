@@ -25,8 +25,10 @@ export interface ScenarioSet {
 }
 
 export interface FlowGraph {
+  id?: string;
   name: string;
   schema_version: number;
+  description?: string;
   entry_block: string;
   blocks: FlowBlock[];
   variables?: Record<string, string>;

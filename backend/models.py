@@ -98,10 +98,18 @@ class HttpMethod(str, Enum):
 
 class PerformanceMetric(str, Enum):
     """Performance metrics for verification."""
+    LCP = "LCP"
+    CLS = "CLS"
+    FID = "FID"
+    TTFB = "TTFB"
     PAGE_LOAD_TIME = "page_load_time"  # loadEventEnd - navigationStart
     DOM_INTERACTIVE = "dom_interactive" # domInteractive - navigationStart
     FIRST_BYTE = "first_byte" # responseStart - requestStart
     NETWORK_REQUESTS = "network_requests" # number of requests
+
+class AuthRequest(BaseModel):
+    email: str
+    password: str
 
 
 class FlowState(str, Enum):
@@ -582,6 +590,7 @@ class ScenarioSet(BaseModel):
 
 class FlowGraph(BaseModel):
     """Complete flow graph representing a visual test."""
+    id: Optional[str] = Field(None, description="Unique flow identifier (optional for newly created)")
     name: str = Field(..., description="Flow name")
     schema_version: int = Field(1, description="Schema version for migrations")
     description: Optional[str] = Field(None, description="Flow description")
@@ -864,10 +873,12 @@ class BlockExecution(BaseModel):
 class ExecutionReport(BaseModel):
     """Full report of a flow execution run."""
     run_id: str
+    flow_id: Optional[str] = None
     flow_name: Optional[str] = None
     scenario_name: Optional[str] = None
     started_at: float
     finished_at: Optional[float] = None
+    duration_ms: float = 0
     success: Optional[bool] = None
     blocks: List[BlockExecution] = Field(default_factory=list)
     error: Optional[UserFacingError] = None

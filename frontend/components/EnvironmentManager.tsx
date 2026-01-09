@@ -2,11 +2,13 @@
 import React, { useState } from 'react';
 import { X, Plus, Trash2, Globe, Key, AlertCircle } from 'lucide-react';
 import { Environment } from '../types/environment';
+import { Skeleton } from './Skeleton';
 
 interface EnvironmentManagerProps {
   isOpen: boolean;
   onClose: () => void;
   environments: Environment[];
+  isLoading?: boolean;
   onAdd: (env: Environment) => void;
   onDelete: (id: string) => void;
 }
@@ -15,6 +17,7 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
   isOpen,
   onClose,
   environments,
+  isLoading,
   onAdd,
   onDelete
 }) => {
@@ -70,7 +73,22 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 max-h-[60vh]">
-          {environments.length === 0 && !isAdding ? (
+          {isLoading ? (
+            <div className="grid gap-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="p-5 bg-white/[0.02] border border-white/5 rounded-xl space-y-4">
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-32 rounded-full" />
+                    <Skeleton className="w-8 h-8 rounded-lg" />
+                  </div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-48 rounded-full" />
+                    <Skeleton className="h-3 w-32 rounded-full opacity-50" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : environments.length === 0 && !isAdding ? (
             <div className="flex flex-col items-center justify-center py-12 text-center text-zinc-500">
                <Globe className="w-12 h-12 opacity-10 mb-4" />
                <p className="text-[11px] font-bold uppercase tracking-widest italic">No environments defined</p>

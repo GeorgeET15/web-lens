@@ -7,8 +7,12 @@ interface ConfirmationDialogProps {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  secondaryLabel?: string;
+  tertiaryLabel?: string;
   onConfirm: () => void;
   onCancel?: () => void;
+  onSecondary?: () => void;
+  onTertiary?: () => void;
   isDestructive?: boolean;
   showCancel?: boolean;
 }
@@ -19,8 +23,12 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   message,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
+  secondaryLabel,
+  tertiaryLabel,
   onConfirm,
   onCancel,
+  onSecondary,
+  onTertiary,
   isDestructive = false,
   showCancel = true
 }) => {
@@ -28,7 +36,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-      <div className="bg-zinc-950 border border-white/10 rounded-2xl shadow-[0_30px_100px_rgba(0,0,0,1)] w-[400px] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="bg-zinc-950 border border-white/10 rounded-2xl shadow-[0_30px_100px_rgba(0,0,0,1)] w-[450px] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="p-6 border-b border-white/5 bg-black flex items-center justify-between">
           <div className="flex items-center gap-3">
              <div className={`p-1.5 rounded-lg border ${isDestructive ? 'bg-rose-500/10 border-rose-500/20 text-rose-500' : 'bg-amber-500/10 border-amber-500/20 text-amber-500'}`}>
@@ -47,25 +55,43 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
           </p>
         </div>
 
-        <div className="p-6 pt-0 flex gap-3">
-          {showCancel && (
+        <div className="p-6 pt-0 flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            {showCancel && (
+                <button 
+                    onClick={onCancel}
+                    className="bg-zinc-900 hover:bg-zinc-800 text-white py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all border border-white/5"
+                >
+                    {cancelLabel}
+                </button>
+            )}
+            {tertiaryLabel && onTertiary && (
+                <button 
+                    onClick={onTertiary}
+                    className="bg-zinc-900 hover:bg-zinc-800 text-white py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all border border-white/5"
+                >
+                    {tertiaryLabel}
+                </button>
+            )}
+            {secondaryLabel && onSecondary && (
+                <button 
+                    onClick={onSecondary}
+                    className="bg-zinc-900 hover:bg-zinc-800 text-white py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all border border-white/5"
+                >
+                    {secondaryLabel}
+                </button>
+            )}
             <button 
-                onClick={onCancel}
-                className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all border border-white/5"
+                onClick={onConfirm}
+                className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-xl ${
+                isDestructive 
+                ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/20 col-span-1' 
+                : 'bg-white hover:bg-zinc-200 text-black shadow-white/5 col-span-1'
+                } ${(!secondaryLabel && !tertiaryLabel) ? 'col-span-2' : ''}`}
             >
-                {cancelLabel}
+                {confirmLabel}
             </button>
-          )}
-          <button 
-            onClick={onConfirm}
-            className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-xl ${
-              isDestructive 
-              ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/20' 
-              : 'bg-white hover:bg-zinc-200 text-black shadow-white/5'
-            }`}
-          >
-            {confirmLabel}
-          </button>
+          </div>
         </div>
       </div>
     </div>

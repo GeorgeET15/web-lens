@@ -16,7 +16,9 @@ export const FlowTransformer = {
     blocks: EditorBlock[], 
     globalVariables: { key: string, value: string }[],
     scenarioSets: any[] = [],
-    schema_version: number = 1
+    schema_version: number = 1,
+    id?: string,
+    description?: string
   ): FlowGraph => {
     
     // 1. Convert Variables
@@ -91,8 +93,10 @@ export const FlowTransformer = {
     const entryBlock = blocks.find(b => !b.parentId);
 
     return {
+      id,
       name: flowName,
       schema_version,
+      description,
       entry_block: entryBlock ? entryBlock.id : '',
       blocks: flowBlocks,
       variables,
@@ -118,7 +122,8 @@ export const FlowTransformer = {
     name: string, 
     variables: { id: string, key: string, value: string }[],
     scenarioSets: any[],
-    schemaVersion: number
+    schemaVersion: number,
+    description?: string
   } => {
     
     // 1. Index blocks for O(1) lookup
@@ -231,7 +236,8 @@ export const FlowTransformer = {
           values: s.values
         }))
       })),
-      schemaVersion: flow.schema_version || 1
+      schemaVersion: flow.schema_version || 1,
+      description: flow.description
     };
   }
 };

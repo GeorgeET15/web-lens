@@ -197,6 +197,27 @@ inspector_clients: List[Any] = []  # WebSocket clients (using Any for simplicity
 async def health_check():
     return {"status": "healthy"}
 
+from fastapi import Depends, Header
+
+async def get_current_user(authorization: Optional[str] = Header(None)) -> Optional[str]:
+    """Extracts user_id from Supabase JWT."""
+    if not authorization:
+        return None
+        
+    try:
+        token = authorization.replace("Bearer ", "")
+        from database import db
+        if not db.is_enabled() or not db.client:
+            return None
+            
+        user = db.client.auth.get_user(token)
+        if user and user.user:
+            return user.user.id
+    except Exception as e:
+        logger.error(f"Auth validation failed: {e}")
+        
+    return None
+
 @app.get("/api/blocks/types", response_model=BlockTypesResponse)
 async def get_block_types():
     return BlockTypesResponse(
@@ -591,7 +612,11 @@ async def validate_flow(request: FlowExecutionRequest):
 
 
 @app.post("/api/execute/start", response_model=ExecutionStartResponse)
-async def start_execution(request: FlowExecutionRequest, background_tasks: BackgroundTasks):
+async def start_execution(
+    request: FlowExecutionRequest, 
+    background_tasks: BackgroundTasks,
+    user_id: Optional[str] = Depends(get_current_user)
+):
     """
     Start async execution and return run_id.
     
@@ -650,11 +675,18 @@ async def start_execution(request: FlowExecutionRequest, background_tasks: Backg
             }
         )
     
+    # HANDOFF: Verify Auth for Cloud Features
+    if user_id:
+        logger.info(f"Authenticated execution for user: {user_id}")
+    else:
+        logger.warning("Anonymous execution - data will NOT be saved to Supabase.")
+
     # Hand off to unified execution manager
     run_id = start_background_execution(
         request.flow, 
         request.headless, 
-        request.variables
+        request.variables,
+        user_id=user_id
     )
     
     return ExecutionStartResponse(run_id=run_id, message="Execution started")
@@ -698,9 +730,92 @@ async def execute_flow(request: FlowExecutionRequest):
         return ExecutionResult(success=False, message=str(e), logs=[])
 
 
+
+# --- Flow Persistence (Supabase) ---
+
+@app.get("/api/user/stats")
+async def get_user_stats_endpoint(user_id: Optional[str] = Depends(get_current_user)):
+    """Fetch user statistics."""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+        
+    from database import db
+    if not db.is_enabled():
+        return {"flows": 0, "executions": 0, "screenshots": 0}
+        
+    return db.get_user_stats(user_id)
+
+@app.get("/api/flows")
+async def list_flows(user_id: Optional[str] = Depends(get_current_user)):
+    """List flows from Supabase (if authenticated) or local disk."""
+    flows = []
+    
+    # 1. Try Cloud
+    if user_id:
+        from database import db
+        if db.is_enabled():
+            try:
+                response = db.client.table("flows").select("*").eq("user_id", user_id).execute()
+                for record in response.data:
+                    # Convert DB record to lightweight flow summary
+                    flows.append({
+                        "id": record['id'],
+                        "name": record['name'],
+                        "description": record.get('description'),
+                        "updated_at": record['updated_at'],
+                        "source": "cloud",
+                        # Return full graph or just summary? For now, we return full graph locally but maybe summary list 
+                        # usually involves less data. But frontend expects full load? 
+                        # Let's just return the graph so it can be loaded.
+                        "graph": record['graph']
+                    })
+            except Exception as e:
+                logger.error(f"Failed to fetch cloud flows: {e}")
+
+    # 2. Add Local Flows (Legacy/Demo)
+    # ... (Keep existing local logic if any, but currently we just return empty list or what's in memory?)
+    # For now, let's just return what we have.
+    
+    return flows
+
+@app.post("/api/flows")
+async def save_flow(request: FlowExecutionRequest, user_id: Optional[str] = Depends(get_current_user)):
+    """Save flow to Supabase."""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required to save flows")
+        
+    from database import db
+    if not db.is_enabled():
+        raise HTTPException(status_code=503, detail="Cloud storage unavailable")
+        
+    flow_id = db.save_flow(user_id, request.flow)
+    if not flow_id:
+        raise HTTPException(status_code=500, detail="Failed to save flow")
+        
+    return {"id": flow_id, "message": "Flow saved successfully"}
+
+
+@app.delete("/api/flows/{flow_id}")
+async def delete_flow(flow_id: str, user_id: Optional[str] = Depends(get_current_user)):
+    """Delete flow from Supabase."""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+        
+    from database import db
+    if not db.is_enabled():
+        raise HTTPException(status_code=503, detail="Cloud storage unavailable")
+        
+    try:
+        response = db.client.table("flows").delete().eq("id", flow_id).eq("user_id", user_id).execute()
+        return {"message": "Flow deleted"}
+    except Exception as e:
+        logger.error(f"Failed to delete flow: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/executions/{run_id}")
 async def get_execution_report(run_id: str):
-    """Retrieve execution report by ID, from memory or disk."""
+    """Retrieve execution report by ID, from memory, disk, or Supabase."""
     if run_id in execution_history:
         report = execution_history[run_id]
         if hasattr(report, 'dict'):
@@ -714,9 +829,76 @@ async def get_execution_report(run_id: str):
             with open(report_path, "r") as f:
                 return json.load(f)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error reading report from disk: {str(e)}")
+            logger.error(f"Error reading report from disk: {e}")
+            
+    # Try Supabase fallback (Public sharing support)
+    from database import db
+    if db.is_enabled():
+        try:
+            # Query by run_id (which is id in executions table)
+            response = db.client.table("executions").select("report").eq("id", run_id).execute()
+            if response.data and len(response.data) > 0:
+                return response.data[0]['report']
+        except Exception as e:
+            logger.error(f"Failed to fetch execution {run_id} from Supabase: {e}")
             
     raise HTTPException(status_code=404, detail="Execution report not found")
+
+
+# --- Auth Routes (Proxy Mode) ---
+
+from models import AuthRequest
+
+@app.post("/api/auth/signup")
+async def auth_signup(creds: AuthRequest):
+    """Register new user via backend proxy."""
+    from database import db
+    if not db.is_enabled():
+         raise HTTPException(status_code=503, detail="Auth service unavailable")
+         
+    try:
+        response = db.client.auth.sign_up({
+            "email": creds.email,
+            "password": creds.password,
+        })
+        if not response.user:
+             raise Exception("Signup failed")
+             
+        return {"message": "Signup successful! Check your email."}
+    except Exception as e:
+        logger.error(f"Signup failed: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/auth/login")
+async def auth_login(creds: AuthRequest):
+    """Login user via backend proxy and return session."""
+    from database import db
+    if not db.is_enabled():
+         raise HTTPException(status_code=503, detail="Auth service unavailable")
+
+    try:
+        response = db.client.auth.sign_in_with_password({
+            "email": creds.email,
+            "password": creds.password,
+        })
+        
+        if not response.session:
+            raise Exception("Invalid credentials")
+
+        return {
+            "user": {
+                "id": response.user.id,
+                "email": response.user.email
+            },
+            "session": {
+                "access_token": response.session.access_token,
+                "refresh_token": response.session.refresh_token,
+                "expires_in": response.session.expires_in
+            }
+        }
+    except Exception as e:
+        logger.error(f"Login failed: {e}")
+        raise HTTPException(status_code=401, detail="Login failed: Invalid credentials")
 
 
 @app.get("/api/executions/{run_id}/report/json")
@@ -797,16 +979,14 @@ async def get_report_share(run_id: str):
     return await get_execution_report(run_id)
 
 @app.get("/api/executions")
-async def list_executions():
-    """List recent executions from memory and disk."""
+async def list_executions(user_id: Optional[str] = Depends(get_current_user)):
+    """List recent executions from memory, disk, and Supabase (if authenticated)."""
     results = {}
     
     # 1. Load from disk first
     if config.EXECUTIONS_DIR.exists():
         for f in config.EXECUTIONS_DIR.glob("*.json"):
             try:
-                # We only need the metadata, so we could just read the first few KB
-                # but for simplicity we read the whole thing for now
                 with open(f, "r") as report_file:
                     data = json.load(report_file)
                     results[data["run_id"]] = {
@@ -819,7 +999,31 @@ async def list_executions():
             except:
                 continue
                 
-    # 2. Add from memory (overwriting disk if same run_id - memory is more recent)
+    # 2. Load from Supabase (if authenticated)
+    if user_id:
+        from database import db
+        if db.is_enabled():
+            try:
+                # Fetch recent executions for this user
+                # We limit to 50 for performance
+                response = db.client.table("executions").select("id, status, created_at, report").eq("user_id", user_id).order("created_at", desc=True).limit(50).execute()
+                for record in response.data:
+                    run_id = record['id']
+                    # Use created_at as fallback for started_at if not in report
+                    report = record.get('report') or {}
+                    
+                    # Merge/Overwrite local with cloud (cloud is source of truth for history)
+                    results[run_id] = {
+                        "run_id": run_id,
+                        "scenario_name": report.get("scenario_name", "Cloud Execution"),
+                        "started_at": report.get("started_at", 0),
+                        "finished_at": report.get("finished_at"),
+                        "success": record.get("status") == "completed"
+                    }
+            except Exception as e:
+                logger.error(f"Failed to fetch cloud executions: {e}")
+
+    # 3. Add from memory (overwriting disk/cloud if same run_id - memory is most recent active state)
     for run_id, report in execution_history.items():
         results[run_id] = {
             "run_id": run_id, 
@@ -829,7 +1033,7 @@ async def list_executions():
             "success": getattr(report, "success", False)
         }
         
-    # 3. Sort by started_at descending and limit to 50
+    # 4. Sort by started_at descending and limit to 50
     sorted_executions = sorted(
         results.values(), 
         key=lambda x: x["started_at"], 

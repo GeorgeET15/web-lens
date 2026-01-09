@@ -7,6 +7,7 @@ import { API_ENDPOINTS } from '../../config/api';
 import { ExecutionSummary } from '../../types/execution';
 import { cn } from '../../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
+import { Skeleton } from '../Skeleton';
 
 interface Props {
   onSelect: (runId: string) => void;
@@ -73,10 +74,20 @@ export const ExecutionList: React.FC<Props> = ({
       {/* List */}
       <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700">
         {isLoading ? (
-          <div className="p-8 text-center">
-            <div className="w-4 h-4 border-2 border-zinc-700 border-t-white rounded-full animate-spin mx-auto mb-2" />
-            <p className="text-[9px] text-zinc-600 uppercase tracking-wider">Loading history...</p>
-          </div>
+           <div className="p-3 space-y-3">
+             {Array.from({ length: 12 }).map((_, i) => (
+               <div key={i} className="p-3 rounded-xl border border-white/5 bg-zinc-900/10 space-y-2.5">
+                 <div className="flex items-center gap-2">
+                   <Skeleton className="w-3.5 h-3.5 rounded-full" />
+                   <Skeleton className="h-3 w-3/4 rounded-full" />
+                 </div>
+                 <div className="flex justify-between pl-5.5">
+                   <Skeleton className="h-2 w-16 opacity-50" />
+                   <Skeleton className="h-2 w-24 opacity-50" />
+                 </div>
+               </div>
+             ))}
+           </div>
         ) : error ? (
           <div className="p-8 text-center text-rose-500/80">
              <p className="text-[10px]">{error}</p>

@@ -29,15 +29,11 @@ environments: Dict[str, EnvironmentConfig] = {
 suite_executions: Dict[str, Any] = {}
 
 def clean_report_for_disk(report: Dict[str, Any]) -> Dict[str, Any]:
-    """Remove heavy base64 images from report for compact storage."""
-    report_copy = copy.deepcopy(report)
-    if 'blocks' in report_copy:
-        for block in report_copy['blocks']:
-            if 'screenshot' in block:
-                block['screenshot'] = None
-    if 'result' in report_copy and report_copy['result'] and 'screenshot' in report_copy['result']:
-        report_copy['result']['screenshot'] = None
-    return report_copy
+    """
+    Prepares report for disk storage. 
+    We now keep screenshots to allow shared links to be 'live' with full evidence.
+    """
+    return copy.deepcopy(report)
 
 def render_html_report(report: Dict[str, Any]) -> str:
     """Render a premium HTML report using the dedicated template."""
@@ -152,7 +148,8 @@ def generate_pdf_report(report: Dict[str, Any]) -> bytes:
 def execute_flow_background(run_id: str, flow_data: Dict[str, Any], headless: bool, 
                             variables: Optional[Dict[str, str]] = None, 
                             environment_id: Optional[str] = None,
-                            inline_environment: Optional[EnvironmentConfig] = None):
+                            inline_environment: Optional[EnvironmentConfig] = None,
+                            user_id: Optional[str] = None):
     """Executes flow in background and pushes events to queue."""
     logger.info(f"[{run_id}] Starting background execution (Foundation)")
     
@@ -194,8 +191,12 @@ def execute_flow_background(run_id: str, flow_data: Dict[str, Any], headless: bo
             q.put({"type": "block_execution", "data": data})
 
         # 6. Execute with Interpreter
-        # 6. Execute with Interpreter
         interpreter = BlockInterpreter(browser_engine, on_event=on_event)
+        
+        # EXPOSE REPORT LIVE: Add to history immediately so /api/reports/ can fetch current state
+        if interpreter.context:
+            execution_history[run_id] = interpreter.context.report
+            
         result = interpreter.execute_flow(
             flow, 
             run_id=run_id, 
@@ -211,6 +212,36 @@ def execute_flow_background(run_id: str, flow_data: Dict[str, Any], headless: bo
             try:
                 full_report_dict = report.model_dump(mode='json')
                 
+                # --- Supabase Integration ---
+                from database import db
+                if db.is_enabled():
+                    # 1. Upload Screenshots
+                    # Note: We duplicate the dict to avoid modifying the in-memory object used for the UI immediate response
+                    cloud_report = copy.deepcopy(full_report_dict)
+                    
+                    if 'blocks' in cloud_report:
+                        for idx, block in enumerate(cloud_report['blocks']):
+                            if block.get('screenshot'):
+                                # Use unique filename: step_index + block_id
+                                filename = f"step_{idx}_{block.get('block_id', 'unknown')}"
+                                logger.info(f"[{run_id}] Uploading screenshot for step {idx} (block: {block.get('block_id')})")
+                                
+                                # Upload
+                                url = db.upload_screenshot(block['screenshot'], run_id, filename)
+                                if url:
+                                    block['screenshot'] = url
+                                else:
+                                    logger.warning(f"[{run_id}] Failed to upload screenshot for step {idx}")
+                                    block['screenshot'] = None # Failed/Disabled
+                    
+                    # 2. Save Execution Record
+                    # ONLY save to Supabase if we have a valid user_id
+                    if user_id:
+                        db.save_execution(user_id=user_id, report=cloud_report)
+                    else:
+                        logger.info(f"[{run_id}] Skipping Supabase sync (Anonymous execution)")
+
+                # --- Local Fallback / Legacy ---
                 # Save HTML
                 html_path = config.EXECUTIONS_DIR / f"{run_id}.html"
                 html_content = render_html_report(full_report_dict)
@@ -235,7 +266,9 @@ def execute_flow_background(run_id: str, flow_data: Dict[str, Any], headless: bo
             browser_engine.close()
         q.put(None)
 
-def start_execution(flow_data: Dict[str, Any], headless: bool = True, variables: Optional[Dict[str, str]] = None) -> str:
+def start_execution(flow_data: Dict[str, Any], headless: bool = True, 
+                    variables: Optional[Dict[str, str]] = None, 
+                    user_id: Optional[str] = None) -> str:
     """Unified entry point for any flow execution."""
     run_id = str(uuid.uuid4())
     event_queues[run_id] = queue.Queue()
@@ -244,7 +277,10 @@ def start_execution(flow_data: Dict[str, Any], headless: bool = True, variables:
         run_id, 
         flow_data, 
         headless, 
-        variables
+        variables,
+        None, # environment_id
+        None, # inline_environment
+        user_id
     ))
     thread.start()
     return run_id
