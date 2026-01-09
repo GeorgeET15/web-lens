@@ -22,7 +22,7 @@ import {
 
 import type { FlowGraph } from '../types/flow';
 import { BaseBlock, BaseBlockOverlay } from './blocks/BaseBlock';
-import { Plus, Minus, Save, FolderOpen, Trash2, X, LocateFixed, Sparkles, Info } from 'lucide-react';
+import { Plus, Minus, Save, FolderOpen, Trash2, X, LocateFixed, Sparkles } from 'lucide-react';
 import { FlowStorage, SavedFlowMetadata } from '../lib/storage';
 import { OnboardingModal } from '../components/OnboardingModal';
 import { Minimap } from './Minimap';
@@ -32,7 +32,7 @@ import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { ScenarioPanel } from '../components/ScenarioPanel';
 import { EditorBlock, BlockType, SavedValue, ScenarioSuiteReport } from './entities';
 import { ScenarioSuiteDashboard } from '../components/execution/ScenarioSuiteDashboard';
-import { AIInsight } from '../components/ai/AIInsight';
+import { AICopilotPanel } from '../components/ai/AICopilotPanel';
 import { cn } from '../lib/utils';
 import { DEFAULT_BLOCKS } from './constants';
 
@@ -63,7 +63,6 @@ interface FlowEditorProps {
   showOnboarding?: boolean;
   setShowOnboarding?: (show: boolean) => void;
   onViewScenario?: (runId: string) => void;
-  lastReport?: any;
 }
 
 
@@ -204,8 +203,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
   ({ onFlowChange, onValidationError, onRequestPick, highlightBlockId, onBlockClick,
     showOnboarding,
     setShowOnboarding,
-    onViewScenario,
-    lastReport
+    onViewScenario
   }, ref) => {
     // State for blocks
     const [blocks, setBlocks] = useState<EditorBlock[]>([]);
@@ -219,21 +217,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
     const [schemaVersion, setSchemaVersion] = useState(1);
     
     // AI Roles State
-    const [aiReview, setAiReview] = useState<string>("");
-    const [isAiReviewLoading, setIsAiReviewLoading] = useState(false);
     const [showAiReview, setShowAiReview] = useState(false);
-    
-    // Role 1: Translator State
-    const [intentText, setIntentText] = useState("");
-    const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
-    const [translatorFeedback, setTranslatorFeedback] = useState<string>("");
-
-    // Role 4: Companion State
-    const [companionQuery, setCompanionQuery] = useState("");
-    const [companionAnswer, setCompanionAnswer] = useState("");
-    const [isCompanionLoading, setIsCompanionLoading] = useState(false);
-    
-    // Persistence UI State
     const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
     const [savedFlows, setSavedFlows] = useState<SavedFlowMetadata[]>([]);
     
@@ -397,89 +381,9 @@ const [dialogConfig, setDialogConfig] = useState<{
         }
     }));
 
-    const handleReviewFlow = async () => {
-        if (blocks.length < 2) {
-            setAiReview("Please add more blocks to your flow and run it at least once so the AI has enough evidence to provide a helpful review.");
-            setShowAiReview(true);
-            return;
-        }
-        setShowAiReview(true);
-        setIsAiReviewLoading(true);
-        const flowData = FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, schemaVersion);
-        
-        // Attach latest execution evidence if available
-        // Priority: 1. Manual run report (lastReport), 2. Scenario suite report (suiteReport)
-        const lastExecution = lastReport || suiteReport?.results?.[0]?.report;
-        const payload = {
-            ...flowData,
-            execution_report: lastExecution || null
-        };
 
-        console.log("Sending AI Review Payload:", payload);
-        try {
-            const res = await fetch('/api/ai/investigate-run', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    flow: flowData,
-                    result: { report: lastExecution }
-                })
-            });
-            const data = await res.json();
-            console.log("Raw AI Review Data:", data.review);
-            console.log("AI Review Length:", data.review.length);
-            setAiReview(data.review);
-        } catch (err) {
-            console.error("AI Flow Review failed:", err);
-            setAiReview("Unable to review flow at this time.");
-        } finally {
-            setIsAiReviewLoading(false);
-        }
-    };
 
-    const handleGenerateDraft = async () => {
-        if (!intentText.trim()) return;
-        
-        setIsGeneratingDraft(true);
-        setTranslatorFeedback("");
-        
-        try {
-            const res = await fetch('/api/ai/draft-flow', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ intent: intentText })
-            });
-            const data = await res.json();
-            const text = data.review || "";
-            
-            // Extract JSON blocks if present
-            const jsonMatch = text.match(/---JSON_START---([\s\S]*?)---JSON_END---/);
-            const feedbackText = text.replace(/---JSON_START---([\s\S]*?)---JSON_END---/, "").trim();
-            
-            setTranslatorFeedback(feedbackText);
-            
-            if (jsonMatch) {
-                try {
-                    const parsedBlocks = JSON.parse(jsonMatch[1]);
-                    // Store as preview blocks, maybe user wants to see them before applying
-                    // For now, let's keep them in feedback or a separate state
-                    (window as any).__draftBlocks = parsedBlocks;
-                } catch (e) {
-                    console.error("Failed to parse draft JSON:", e);
-                }
-            }
-        } catch (err) {
-            console.error("AI Draft generation failed:", err);
-            setTranslatorFeedback("Unable to generate draft flow at this time.");
-        } finally {
-    setIsGeneratingDraft(false);
-        }
-    };
-
-    const handleApplyDraft = () => {
-        const draftBlocks = (window as any).__draftBlocks;
-        if (!draftBlocks) return;
-        
+    const handleApplyAIBlocks = (draftBlocks: any[]) => {
         // Valid block types from entities.ts
         const validBlockTypes = new Set([
             'open_page', 'click_element', 'enter_text', 'wait_until_visible', 'assert_visible',
@@ -505,9 +409,6 @@ const [dialogConfig, setDialogConfig] = useState<{
             return;
         }
         
-        // Convert to EditorBlocks with SNAPPED flow
-        // To snap blocks, we chain them via parentId and ONLY set position for the root (first) block.
-        // Child blocks must have position: undefined to flow naturally in the UI.
         const timestamp = Date.now();
         const newBlocks: EditorBlock[] = validDraftBlocks.map((b: any, i: number) => {
             const blockId = `draft_${timestamp}_${i}`;
@@ -519,46 +420,14 @@ const [dialogConfig, setDialogConfig] = useState<{
                 label: b.label || `Block ${i + 1}`,
                 params: b.params || {},
                 parentId: parentBlockId,
-                // Only the first block gets a specific position on canvas.
-                // Subsequent blocks effectively "snap" to the previous one by not having a position.
                 position: i === 0 ? { x: 100, y: 100 } : undefined
             };
         });
         
-        // Replace existing blocks with the new flow
         setBlocks(newBlocks);
-        setTranslatorFeedback("");
-        setIntentText("");
-        (window as any).__draftBlocks = null;
     };
 
-    const handleAskCompanion = async () => {
-        if (!companionQuery.trim()) return;
-        setIsCompanionLoading(true);
-        setCompanionAnswer("");
-        
-        try {
-            const flowData = FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, schemaVersion);
-            const res = await fetch('/api/ai/ask-companion', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    insight: {
-                        flow: flowData,
-                        execution_report: lastReport || null
-                    },
-                    query: companionQuery
-                })
-            });
-            const data = await res.json();
-            setCompanionAnswer(data.answer);
-        } catch (err) {
-            console.error("AI Companion failed:", err);
-            setCompanionAnswer("The WebLens Companion is currently unavailable.");
-        } finally {
-            setIsCompanionLoading(false);
-        }
-    };
+
 
     // Resizing Logic
     useEffect(() => {
@@ -1059,8 +928,10 @@ const [dialogConfig, setDialogConfig] = useState<{
             ${isResizingSidebar ? '' : 'transition-[width] duration-300'}
         `}>
           {/* VSCode-style Header */}
-          <div className="p-4 border-b border-white/10 flex items-center justify-between bg-zinc-900/20">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Blocks</span>
+          <div className="p-4 border-b border-white/10 bg-zinc-900/20">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Blocks</span>
+              </div>
           </div>
 
           {/* Resizer Handle */}
@@ -1094,7 +965,7 @@ const [dialogConfig, setDialogConfig] = useState<{
                 <div>
                   <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 cursor-default select-none">Core</h2>
                   <div className="grid gap-2">
-                    {(['open_page', 'delay', 'refresh_page', 'wait_for_page_load'] as BlockType[])
+                    {(['ai_prompt', 'open_page', 'delay', 'refresh_page', 'wait_for_page_load'] as BlockType[])
                       .filter(type => DEFAULT_BLOCKS[type].label.toLowerCase().includes(blockSearchQuery.toLowerCase()))
                       .map(type => (
                       <button
@@ -1359,8 +1230,16 @@ const [dialogConfig, setDialogConfig] = useState<{
         {/* Helper Handle when closed to reopen easily if the small toggle is hard to hit (optional, keeping clean for now) */}
 
 
+
+        {/* Main Content Area (Canvas + AI Panel Overlay) */}
+        <div className="flex-1 flex relative h-full overflow-hidden">
+        
+        {/* Main Canvas Area */}
         <div 
-            className="flex-1 relative overflow-hidden bg-black select-none cursor-grab active:cursor-grabbing"
+            className={cn(
+               "flex-1 relative overflow-hidden bg-black select-none cursor-grab active:cursor-grabbing transition-all duration-500",
+               // viewMode === 'agent' ? "w-0 h-0 opacity-0 overflow-hidden" : "flex-1 opacity-100 visible scale-100" // REMOVED: Canvas stays visible
+            )}
             onClick={handleCanvasClick}
             onWheel={(e) => {
                 if (e.ctrlKey || e.metaKey) {
@@ -1389,9 +1268,9 @@ const [dialogConfig, setDialogConfig] = useState<{
             onMouseUp={() => setIsPanning(false)}
             onMouseLeave={() => setIsPanning(false)}
         >
-          {/* Background Grid Pattern */}
+          {/* Canvas Component */}
           <div 
-             className="absolute inset-0 canvas-bg" 
+             className="absolute inset-0 canvas-bg opacity-100 transition-opacity duration-500"
              style={{ 
                  backgroundPosition: `${view.x}px ${view.y}px`,
                  backgroundSize: `${20 * view.scale}px ${20 * view.scale}px`,
@@ -1489,7 +1368,7 @@ const [dialogConfig, setDialogConfig] = useState<{
                     "flex items-center justify-center p-3 bg-zinc-950 border rounded-xl transition-all shadow-[0_10px_40px_rgba(0,0,0,0.5)] active:scale-95 group",
                     showAiReview ? "border-indigo-500 text-white bg-indigo-500/10" : "border-indigo-500/20 text-indigo-400 hover:text-white hover:bg-indigo-900/40"
                  )}
-                 title="AI Assistant"
+                  title="[EXPERIMENTAL] AI Assistant"
               >
                  <Sparkles className={cn("w-4 h-4 group-hover:scale-110 transition-transform", showAiReview && "animate-pulse")} />
               </button>
@@ -1596,158 +1475,21 @@ const [dialogConfig, setDialogConfig] = useState<{
             )}
         </div>
 
-        {/* AI Side Panel (Right-side Collapsible) */}
+        {/* AI Side Panel */}
         <div 
             className={cn(
-                "bg-zinc-950 border-l border-white/5 flex flex-col h-full transition-all duration-300 ease-in-out overflow-hidden z-40 relative",
+                "bg-black/90 border-l border-white/5 flex flex-col h-full transition-all duration-500 ease-in-out overflow-hidden z-40 relative",
                 showAiReview ? "w-[400px]" : "w-0 border-l-0"
             )}
         >
-            <div className="w-[400px] flex flex-col h-full bg-black/40 backdrop-blur-xl">
-                <div className="p-6 border-b border-white/10 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <Sparkles size={16} className="text-indigo-400" />
-                        <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-white">AI Control Panel</h3>
-                    </div>
-                    <button 
-                        onClick={() => setShowAiReview(false)}
-                        className="p-2 hover:bg-white/5 rounded-xl text-zinc-600 hover:text-white transition-all active:scale-90"
-                    >
-                        <X size={18} />
-                    </button>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
-                    {/* Role 1: AI Translator */}
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Draft Sequence</h4>
-                            <span className="text-[8px] bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest border border-indigo-500/20">Generated Prototype</span>
-                        </div>
-                        <p className="text-[10px] text-zinc-500 leading-relaxed font-medium">
-                            Describe your intent. AI summarizes and describes a non-runnable draft.
-                        </p>
-                        <div className="bg-amber-500/5 border border-amber-500/20 p-3 rounded-lg flex gap-3">
-                            <Info size={14} className="text-amber-500 shrink-0 mt-0.5" />
-                            <p className="text-[9px] text-amber-200/60 leading-relaxed italic">
-                                This is a non-runnable draft. Review blocks and manually pick elements before execution.
-                            </p>
-                        </div>
-                        <textarea 
-                            value={intentText}
-                            onChange={(e) => setIntentText(e.target.value)}
-                            placeholder="e.g. Test checkout flow with empty cart..."
-                            className="w-full bg-zinc-900 border border-white/10 rounded-xl p-4 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500/30 transition-all resize-none h-24 placeholder:text-zinc-700 font-medium shadow-inner"
-                        />
-                        <button 
-                            onClick={handleGenerateDraft}
-                            disabled={isGeneratingDraft || !intentText.trim()}
-                            className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-[0.98] flex items-center justify-center gap-2"
-                        >
-                            {isGeneratingDraft && <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />}
-                            {isGeneratingDraft ? 'Creating...' : 'Create Draft Blocks'}
-                        </button>
-
-                        {translatorFeedback && (
-                            <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                <AIInsight 
-                                    roleLabel="Draft Commentary (Non-Authoritative)"
-                                    type="draft"
-                                    content={translatorFeedback}
-                                    isCollapsible={false}
-                                    className="bg-indigo-500/5 border-dashed border-indigo-500/10"
-                                />
-                                <button 
-                                    onClick={handleApplyDraft}
-                                    className="w-full mt-3 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-black uppercase tracking-widest text-zinc-300 rounded-xl transition-all"
-                                >
-                                    Apply to Canvas
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="h-px bg-white/5" />
-
-                    {/* Role 3: Live Investigator */}
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">AI Commentary (Non-Authoritative)</h4>
-                            <span className="text-[8px] bg-white/5 text-zinc-500 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest border border-white/10">Evidence Review</span>
-                        </div>
-                        <p className="text-[10px] text-zinc-600 leading-relaxed font-medium">
-                            Summarizes the current flow for logic patterns and potential block interactions.
-                        </p>
-                        <button 
-                            onClick={handleReviewFlow}
-                            disabled={isAiReviewLoading}
-                            className="w-full py-3 border border-indigo-500/50 hover:bg-indigo-500/10 text-indigo-400 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2"
-                        >
-                            {isAiReviewLoading ? 'Summarizing...' : 'Generate Flow Commentary'}
-                        </button>
-
-                        {aiReview && !isAiReviewLoading && (
-                            <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                <AIInsight 
-                                    type="inspection" 
-                                    roleLabel="AI Commentary (Non-Authoritative)"
-                                    content={aiReview} 
-                                    isCollapsible={false}
-                                    className="border-dashed"
-                                />
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="h-px bg-white/5" />
-
-                    {/* Role 4: WebLens Assistant */}
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest text-blue-400">WebLens Assistant</h4>
-                            <span className="text-[8px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-widest border border-blue-500/20">Educational</span>
-                        </div>
-                        <p className="text-[10px] text-zinc-600 leading-relaxed font-medium">
-                            Ask about philosophies or block behaviors (Role 4).
-                        </p>
-                        <div className="relative">
-                            <input 
-                                value={companionQuery}
-                                onChange={(e) => setCompanionQuery(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleAskCompanion()}
-                                placeholder="What is a 'Save Text' block?"
-                                className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-4 pr-12 py-3 text-xs text-zinc-300 focus:outline-none focus:border-blue-500/30 transition-all placeholder:text-zinc-700 font-medium"
-                            />
-                            <button 
-                                onClick={handleAskCompanion}
-                                disabled={isCompanionLoading || !companionQuery.trim()}
-                                className="absolute right-1.5 top-1.5 bottom-1.5 px-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg transition-all active:scale-90"
-                            >
-                                <Plus size={16} className={isCompanionLoading ? "animate-spin" : ""} />
-                            </button>
-                        </div>
-
-                        {companionAnswer && (
-                            <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                <AIInsight 
-                                    roleLabel="WebLens Commentary (Non-Authoritative)"
-                                    type="inspection"
-                                    content={companionAnswer}
-                                    onClose={() => setCompanionAnswer("")}
-                                    className="border-dashed"
-                                />
-                            </div>
-                        )}
-                    </div>
-                </div>
-                
-                <div className="p-6 border-t border-white/5 bg-black/20">
-                    <p className="text-[9px] text-zinc-700 uppercase tracking-[0.2em] text-center font-black">
-                        Generated Commentary • Non-Authoritative
-                    </p>
-                </div>
-            </div>
+            <AICopilotPanel 
+                onApplyBlocks={handleApplyAIBlocks}
+                onRunComplete={onViewScenario}
+                onClose={() => setShowAiReview(false)}
+            />
         </div>
+        
+        </div> {/* End Main Content Area Wrapper */}
 
         {/* Global Resize Overlay */}
         {isResizingSidebar && (

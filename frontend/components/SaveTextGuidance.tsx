@@ -1,4 +1,4 @@
-import { FileText, FileSearch } from 'lucide-react';
+import { FileText, FileSearch, AlertTriangle } from 'lucide-react';
 
 interface SaveTextGuidanceProps {
   onUseSavePageContent: () => void;
@@ -9,7 +9,7 @@ export function SaveTextGuidance({ onUseSavePageContent, onUseVerifyPageContent 
   return (
     <div className="p-4 bg-amber-900/20 border border-amber-500/30 rounded-lg space-y-3 mt-2">
       <div className="flex gap-2">
-        <div className="text-amber-500 mt-0.5">⚠️</div>
+        <div className="text-amber-500 mt-0.5"><AlertTriangle className="w-4 h-4" /></div>
         <div className="space-y-1">
           <p className="text-sm font-medium text-amber-200">
             Unstable Element Detected

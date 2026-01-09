@@ -13,13 +13,13 @@ class TAFRegistry:
         if intent_type == "structural":
             analysis.append(f"Using structural intent resolution for '{name}' (semantic void)")
             analysis.append("This element has no semantic identity - resolution uses multiple weak signals")
-            feedback.append("⚠️ Structural intent requires post-action verification")
-            feedback.append("💡 Adding aria-label will eliminate the need for structural resolution")
+            feedback.append("Structural intent requires post-action verification")
+            feedback.append("Adding aria-label will eliminate the need for structural resolution")
         elif name_source == "user_declared":
             if region:
                 analysis.append(f"Searching for '{name}' in the {region} region.")
             analysis.append("This interaction relies on a manually declared semantic label.")
-            feedback.append("💡 Adding an accessible label (aria-label) in your application will improve test stability.")
+            feedback.append("Adding an accessible label (aria-label) in your application will improve test stability.")
             
         return {
             "trace": [f"Looking for '{name}'"],

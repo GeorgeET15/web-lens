@@ -47,6 +47,7 @@ class BlockType(str, Enum):
     GET_SESSION_STORAGE = "get_session_storage"
     OBSERVE_NETWORK = "observe_network"
     SWITCH_TAB = "switch_tab"
+    AI_PROMPT = "ai_prompt"
 
 class FileSourceType(str, Enum):
     """Origin of the file asset."""
@@ -506,6 +507,12 @@ class SwitchTabBlock(BaseBlock):
     tab_index: Optional[int] = Field(0, description="Index of tab to switch to (if not newest)")
 
 
+class AIPromptBlock(BaseBlock):
+    """[EXPERIMENTAL] Executes a natural language prompt to autonomously determine next steps"""
+    type: Literal[BlockType.AI_PROMPT] = BlockType.AI_PROMPT
+    prompt: str = Field(..., description="Natural language instruction for the agent")
+
+
 # Union type for all block types with discriminator for clear error reporting
 Block = Annotated[
     Union[
@@ -542,6 +549,7 @@ Block = Annotated[
         GetSessionStorageBlock,
         ObserveNetworkBlock,
         SwitchTabBlock,
+        AIPromptBlock,
     ],
     Discriminator("type")
 ]
@@ -752,6 +760,10 @@ class FlowGraph(BaseModel):
                 elif block.condition.kind in ['element_visible', 'element_not_visible', 'text_match']:
                     if not block.condition.element:
                         errors.append(f"{block_label}: Repeat Until requires an element for '{block.condition.kind}'")
+            
+            elif isinstance(block, AIPromptBlock):
+                if not block.prompt or not block.prompt.strip():
+                    errors.append(f"{block_label}: Requires a natural language instruction")
         
         # Evidence-Compatible Saved Values Validation
         # Prohibit {{variables}} in control flow, element selection, and navigation

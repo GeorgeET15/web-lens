@@ -298,7 +298,7 @@ export const ElementPicker: React.FC<ElementPickerProps> = ({
                 {value.name_source === 'user_declared' && (
                   <div className="pt-2 border-t border-amber-500/10 bg-amber-500/5 -mx-4 px-4 pb-1 mt-2 rounded-b-xl">
                     <p className="text-[9px] text-amber-400 leading-relaxed">
-                      💡 This element relies on a manually declared label. Adding an <code className="px-1 py-0.5 bg-black/40 rounded text-amber-300">aria-label</code> to your application will improve test stability.
+                      This element relies on a manually declared label. Adding an <code className="px-1 py-0.5 bg-black/40 rounded text-amber-300">aria-label</code> to your application will improve test stability.
                     </p>
                   </div>
                 )}
@@ -311,6 +311,9 @@ export const ElementPicker: React.FC<ElementPickerProps> = ({
                         >
                             <Sparkles size={10} />
                             Ask WebLens Assistant
+                            <span className="px-1 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-[7px] font-bold text-indigo-400">
+                              EXPERIMENTAL
+                            </span>
                         </button>
                     ) : (
                         <AIInsight 

@@ -474,7 +474,11 @@ class SeleniumEngine(BrowserEngine):
     def refresh_page(self) -> None:
         """Refresh the current page."""
         if self.driver:
-            self.driver.refresh()
+            try:
+                self.driver.refresh()
+            except Exception as e:
+                # Catch closed window race conditions
+                raise BrowserEngineError(f"Failed to refresh page: {str(e)}", technical_details=str(e))
 
     def submit_form(self, handle: WebElement) -> None:
         """Submit a form or the form containing the element."""
@@ -582,6 +586,9 @@ class SeleniumEngine(BrowserEngine):
             )
         except TimeoutException:
             raise BrowserEngineError(f"Page load timed out after {timeout_seconds} seconds")
+        except Exception as e:
+            # Handle "NoSuchWindowException" if user closes browser during load
+            raise BrowserEngineError(f"Browser error during page load: {str(e)}", technical_details=str(e))
 
     def wait_for_stability(self, timeout_seconds: float = 5.0) -> None:
         """
@@ -1138,6 +1145,7 @@ class SeleniumEngine(BrowserEngine):
         );
 
         var isClickable = !isDisabled && (
+            isEditable ||
             ['BUTTON', 'A', 'SUMMARY', 'DETAILS'].includes(tag) || 
             ['button', 'link', 'menuitem', 'tab', 'checkbox', 'radio', 'switch', 'option'].includes(role) || 
             (tag === 'INPUT' && ['button', 'submit', 'reset', 'image', 'checkbox', 'radio', 'file'].includes(type)) ||

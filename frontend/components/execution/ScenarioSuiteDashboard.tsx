@@ -121,7 +121,7 @@ export const ScenarioSuiteDashboard: React.FC<ScenarioSuiteDashboardProps> = ({
             className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500/20 transition-all disabled:opacity-50"
           >
             <Sparkles className={cn("w-3 h-3", isStabilityLoading && "animate-spin")} />
-            {isStabilityLoading ? 'Summarizing...' : 'Run Summary (Computed + Commentary)'}
+            {isStabilityLoading ? 'Summarizing...' : '[EXPERIMENTAL] Run Summary (Computed + Commentary)'}
           </button>
           <button 
             onClick={onBackToEditor}

@@ -18,6 +18,14 @@ export interface BlockExecution {
   tier_2_evidence?: any;
 }
 
+export interface ExecutionSummary {
+  run_id: string;
+  scenario_name?: string | null;
+  started_at: number;
+  finished_at?: number;
+  success: boolean;
+}
+
 export interface ExecutionReport {
   run_id: string;
   started_at: number;

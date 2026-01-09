@@ -23,7 +23,7 @@ from models import (
     ActivatePrimaryActionBlock, SubmitCurrentInputBlock,
     VerifyPageContentBlock, SavePageContentBlock,
     GetCookiesBlock, GetLocalStorageBlock, GetSessionStorageBlock,
-    ObserveNetworkBlock, SwitchTabBlock,
+    ObserveNetworkBlock, SwitchTabBlock, AIPromptBlock,
     HttpMethod, PerformanceMetric,
     ConditionKind, Condition, ElementRef,
     BlockExecution, ExecutionReport, UserFacingError, ErrorCategory
@@ -255,9 +255,11 @@ class BlockInterpreter:
         
         self.context.log(f" Stopping retries  {guidance}")
         
-        # Raise clear error
-        raise BrowserEngineError(
-             f"Could not find '{target_ref.name}' after {max_retries} attempts. {guidance}"
+        # Raise clear structured error
+        raise ElementMissingError(
+             name=target_ref.name or "element",
+             intent=f"Resolving '{target_ref.name}' with {strategy_desc} strategy",
+             strategy_log=self.context.current_taf['analysis']
         )
 
     def _check_capabilities(self, handle: Any, element_name: str, intent: str, required_capability: str) -> None:
@@ -396,6 +398,20 @@ class BlockInterpreter:
             
             # Extract Structured Error
             user_error = getattr(e, 'user_error', None)
+            
+            # Detect Browser Disconnection
+            if not user_error and ("no such window" in str(e).lower() or "not found" in str(e).lower()):
+                from failures import ErrorCategory
+                from errors import UserFacingError
+                user_error = UserFacingError(
+                     title="Browser Disconnected",
+                     intent="System Integrity Check",
+                     reason="The browser window was closed unexpectedly.",
+                     suggestion="The execution cannot continue without the browser. Please restart the flow.",
+                     category=ErrorCategory.SYSTEM,
+                     related_block_id=self.context.executed_blocks[-1] if self.context.executed_blocks else None
+                )
+            
             if not user_error:
                 # Fallback implementation
                 from errors import ErrorFactory
@@ -463,7 +479,7 @@ class BlockInterpreter:
                 try:
                     handle = self._resolve_with_confidence(condition.element)
                     return not self.engine.is_element_visible_handle(handle)
-                except BrowserEngineError:
+                except (BrowserEngineError, WebLensFailure):
                     # Element not found = not visible
                     return True
             
@@ -514,9 +530,11 @@ class BlockInterpreter:
             else:
                 raise ValueError(f"Unknown condition kind: {condition.kind}")
         
-        except BrowserEngineError as e:
-            # Condition evaluation failed - treat as False
-            self.context.log(f"  Condition evaluation failed: {e.message}")
+        except (BrowserEngineError, WebLensFailure) as e:
+            # Condition evaluation failed (e.g., element missing or browser crash) - treat as False
+            # Use getattr to safely access message/reason depending on exception type
+            err_msg = getattr(e, 'reason', str(e))
+            self.context.log(f"  Condition evaluation resulted in False: {err_msg}")
             return False
     
     def _describe_condition(self, condition: Condition) -> str:
@@ -574,6 +592,8 @@ class BlockInterpreter:
                 return f"Extracting text from {block.element.name or 'element'}"
             elif isinstance(block, ActivatePrimaryActionBlock):
                 return "Activating primary action (Search/Submit/Login)"
+            elif isinstance(block, AIPromptBlock):
+                return f"AI Agent: {self._interpolate(block.prompt)}"
             return f"Executing {block.type}..."
         except Exception:
             return f"Executing {block.type}..."
@@ -589,6 +609,7 @@ class BlockInterpreter:
             raise ValueError(f"Block '{block_id}' not found in flow")
         
         self.context.mark_executed(block_id)
+        print(f"--- Executing: {block.type} [{block_id}]", flush=True)
         
         # Start Trace components
         start_time = time.time()
@@ -675,6 +696,8 @@ class BlockInterpreter:
                 self._execute_observe_network(block)
             elif isinstance(block, SwitchTabBlock):
                 self._execute_switch_tab(block)
+            elif isinstance(block, AIPromptBlock):
+                self._execute_ai_prompt(block)
             else:
                 raise ValueError(f"Unknown block type: {type(block)}")
             
@@ -682,6 +705,9 @@ class BlockInterpreter:
 
         except Exception as e:
             status = "failed"
+            print(f"DEBUG: Block [{block_id}] FAILED with exception: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
             raise e
         finally:
             duration_ms = (time.time() - start_time) * 1000
@@ -1343,12 +1369,75 @@ class BlockInterpreter:
                 self.context.emit_taf(channel, msg)
 
     def _execute_switch_tab(self, block: SwitchTabBlock) -> None:
-        """Switch browser tab."""
-        self.context.log(f" Switching tab (To Newest: {block.to_newest}, Index: {block.tab_index})...")
-        self.engine.switch_to_tab(newest=block.to_newest, index=block.tab_index or 0)
-        # Small wait for tab to focus
-        import time
-        time.sleep(1)
+        self.context.emit_taf("trace", f"Switching to {'newest tab' if block.to_newest else f'tab #{block.tab_index}'}")
+        self.engine.switch_tab(block.to_newest, block.tab_index)
+
+    def _execute_ai_prompt(self, block: AIPromptBlock) -> None:
+        """Executes a natural language prompt by calling the AgenticExecutor."""
+        prompt = self._interpolate(block.prompt)
+        self.context.log(f"[EXPERIMENTAL] AI Agent starting mission: '{prompt}'")
+        
+        from ai.ai_service import AIService
+        ai_service = AIService() # Isolated instance for this background thread's execution loop
+        from ai.agentic_executor import AgenticExecutor
+        import asyncio
+        
+        executor = AgenticExecutor(ai_service)
+        
+        # Run async planning in the synchronous interpreter thread
+        try:
+            # Reusing current engine ensures session continuity
+            result = asyncio.run(executor.plan_intent(prompt, existing_engine=self.engine))
+        except Exception as e:
+            raise WebLensFailure(
+                intent=f"[EXPERIMENTAL] AI Prompt Execution: {prompt}",
+                reason=f"Failed to initiate AI planning: {str(e)}",
+                guidance="Check your AI service configuration or connectivity."
+            )
+            
+        if not result.get("success"):
+            raise WebLensFailure(
+                intent=f"[EXPERIMENTAL] AI Prompt Execution: {prompt}",
+                reason=result.get("explanation", "AI failed to generate a plan."),
+                guidance="Try refining your prompt or ensuring the page state is clear."
+            )
+            
+        planned_blocks_data = result.get("planned_blocks", [])
+        if not planned_blocks_data:
+            self.context.log("[EXPERIMENTAL] AI completed mission: No additional steps required.")
+            return
+
+        self.context.log(f"[EXPERIMENTAL] AI Plan generated ({len(planned_blocks_data)} steps). Executing segment...")
+        
+        from pydantic import TypeAdapter
+        from models import Block, FlowGraph
+        from typing import List
+        
+        # Convert raw planned blocks into Pydantic models
+        try:
+            adapter = TypeAdapter(List[Block])
+            blocks_list = adapter.validate_python(planned_blocks_data)
+        except Exception as e:
+            logger.error(f"AI Plan Pydantic validation failed: {e}")
+            logger.debug(f"Invalid Plan Data: {planned_blocks_data}")
+            raise WebLensFailure(
+                intent="AI Plan Integration",
+                reason=f"AI generated invalid block data: {str(e)}",
+                guidance="The agent attempted to use an unsupported block type or structure."
+            )
+            
+        # Create a temporary FlowGraph for the segment
+        temp_flow = FlowGraph(
+            name=f"AI Sub-flow: {prompt}",
+            entry_block=blocks_list[0].id,
+            blocks=blocks_list
+        )
+        
+        # Execute the AI-generated segment within the current context
+        # This will follow the next_block chain within the sub-flow
+        self._execute_block(temp_flow.entry_block, temp_flow)
+        
+        self.context.log("✅ AI Segment completed. Resuming core flow...")
 
     def _execute_get_session_storage(self, block: GetSessionStorageBlock) -> None:
         """Capture session storage."""

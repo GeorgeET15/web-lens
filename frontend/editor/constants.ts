@@ -2,6 +2,11 @@
 import { EditorBlock, BlockType } from './entities';
 
 export const DEFAULT_BLOCKS: Record<BlockType, Omit<EditorBlock, 'id'>> = {
+  ai_prompt: { 
+    type: 'ai_prompt', 
+    label: 'AI Command', 
+    params: { prompt: '' } 
+  },
   open_page: {
     type: 'open_page',
     label: 'Open Page',

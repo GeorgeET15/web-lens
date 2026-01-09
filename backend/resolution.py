@@ -14,7 +14,7 @@ from failures import ElementMissingError, ElementAmbiguousError
 import config
 
 # JavaScript strategy to find element by multi-attribute weighted scoring (MAWS)
-JS_FIND_SEMANTIC = """
+JS_FIND_SEMANTIC = r"""
 function findSemantic(ref) {
     const targetRole = (ref.role || '').toLowerCase();
     const targetName = (ref.name || '').toLowerCase().trim();
@@ -91,10 +91,20 @@ function findSemantic(ref) {
             const elTestId = el.getAttribute('data-testid') || el.getAttribute('data-test-id') || el.getAttribute('data-cy') || el.getAttribute('data-qa');
             if (targetTestId && elTestId === targetTestId) score += 15;
 
-            // 2. Name Match (Semantic Anchor)
+            // 2. Name Match (Semantic Anchor) - FUZZY BIDIRECTIONAL
             const elName = getName(el);
-            if (targetName && elName === targetName) score += 10;
-            else if (targetName && elName.includes(targetName)) score += 5;
+            if (targetName && elName) {
+                if (elName === targetName) score += 12;
+                else if (elName.includes(targetName) || targetName.includes(elName)) {
+                    score += 8;
+                } else {
+                    // Word-by-word intersection for extreme cases
+                    const targetWords = targetName.split(/\s+/).filter(w => w.length > 2);
+                    const elWords = elName.split(/\s+/).filter(w => w.length > 2);
+                    const intersection = targetWords.filter(w => elWords.includes(w));
+                    if (intersection.length > 0) score += (intersection.length * 4);
+                }
+            }
 
             // 3. ARIA Label Match
             const elAria = el.getAttribute('aria-label');

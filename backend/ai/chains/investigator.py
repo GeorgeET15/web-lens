@@ -52,10 +52,8 @@ class InvestigatorChain:
         
         clean_report = deep_clean(execution_report)
         
-        prompt = template.format(
-            execution_report=json.dumps(clean_report, indent=2),
-            scenario_values=json.dumps(scenario_values, indent=2) if scenario_values else "NONE"
-        )
+        prompt = template.replace("{execution_report}", json.dumps(clean_report, indent=2))\
+                         .replace("{scenario_values}", json.dumps(scenario_values, indent=2) if scenario_values else "NONE")
         
         print(f"Investigator Prompt constructed. Length: {len(prompt)} characters.")
         return await self.provider.generate_text(prompt)

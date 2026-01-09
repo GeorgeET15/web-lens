@@ -40,7 +40,14 @@ export const DownloadDropdown: React.FC<DownloadDropdownProps> = ({
       ? `/api/executions/${runId}/report/${format}`
       : `/api/scenarios/suite/${suiteId}/report/${format}`;
     
-    window.open(baseUrl, '_blank');
+    // Create a temporary link to force download without new tab
+    const link = document.createElement('a');
+    link.href = baseUrl;
+    link.download = ''; // Browser will infer filename from backend header
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
     setIsOpen(false);
   };
 

@@ -1,11 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
-from .ai_service import ai_service
-from .schemas import ExecutionInsightInput
-
-router = APIRouter(prefix="/api/ai", tags=["ai"])
-
 from .ai_service import ai_service
 from .schemas import ExecutionInsightInput
 
@@ -16,27 +11,27 @@ class IntentRequest(BaseModel):
 
 @router.post("/draft-flow")
 async def draft_flow(request: IntentRequest):
-    """Role 1: Converts natural language intent into a DRAFT flow."""
+    """[EXPERIMENTAL] Role 1: Converts natural language intent into a DRAFT flow."""
     import logging
     logger = logging.getLogger(__name__)
     try:
-        logger.info(f"AI Translator: Received intent '{request.intent}'")
+        logger.info(f"[EXPERIMENTAL] AI Translator: Received intent '{request.intent}'")
         draft = await ai_service.draft_flow(request.intent)
-        logger.info(f"AI Translator: Generated draft (len={len(draft)})")
+        logger.info(f"[EXPERIMENTAL] AI Translator: Generated draft (len={len(draft)})")
         return {"review": draft}
     except Exception as e:
-        logger.error(f"AI Translator failed: {e}")
+        logger.error(f"[EXPERIMENTAL] AI Translator failed: {e}")
         return {"review": f"Error: AI Translator failed to generate draft: {str(e)}"}
 
 @router.post("/stability-audit")
 async def summarize_scenarios(runs_data: List[dict]):
-    """Role 2: Analyzes execution history for patterns of instability."""
+    """[EXPERIMENTAL] Role 2: Analyzes execution history for patterns of instability."""
     summary = await ai_service.analyze_stability(runs_data)
     return {"summary": summary}
 
 @router.post("/investigate-run")
 async def investgate_run(request: Dict[str, Any]):
-    """Role 3: Explains a specific execution outcome using TAF evidence."""
+    """[EXPERIMENTAL] Role 3: Explains a specific execution outcome using TAF evidence."""
     from .utils import strip_heavy_data
     
     flow = request.get("flow")
@@ -59,19 +54,23 @@ async def investgate_run(request: Dict[str, Any]):
 
 @router.post("/ask-companion")
 async def ask_companion(insight: ExecutionInsightInput, query: str):
-    """Role 4: Explains WebLens concepts and technical behaviors."""
+    """[EXPERIMENTAL] Role 4: Explains WebLens concepts and technical behaviors."""
     answer = await ai_service.ask_companion(insight, query)
     return {"answer": answer}
 
-# Deprecated/Legacy compatibility aliases (optional)
-@router.post("/scenario-review")
-async def legacy_review(request: Dict[str, Any]):
-    return await investgate_run(request)
-
-@router.post("/inspect")
-async def legacy_inspect(insight: ExecutionInsightInput, query: str):
-    return await ask_companion(insight, query)
+# --- Compatibility Shims ---
 
 @router.post("/analyze-failure")
 async def legacy_analyze(insight: ExecutionInsightInput):
+    """[EXPERIMENTAL] Compatibility shim for InsightPanel failure analysis."""
     return {"summary": await ai_service.investigate_run(insight.model_dump())}
+
+@router.post("/inspect")
+async def legacy_inspect(insight: ExecutionInsightInput, query: str):
+    """[EXPERIMENTAL] Compatibility shim for companion queries."""
+    return await ask_companion(insight, query)
+
+@router.post("/scenario-review")
+async def legacy_review(request: Dict[str, Any]):
+    """[EXPERIMENTAL] Compatibility shim for investigator."""
+    return await investgate_run(request)

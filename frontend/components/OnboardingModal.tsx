@@ -64,7 +64,12 @@ export function OnboardingModal({ onDismiss, onLoadFlow, forceOpen }: Onboarding
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="w-1 h-1 rounded-full bg-purple-400/60" />
-                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Semantic AI resolution</p>
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider flex items-center gap-2">
+                            Semantic AI resolution
+                            <span className="px-1 py-0.5 rounded bg-zinc-900 border border-white/5 text-[7px] font-bold text-zinc-400">
+                                EXPERIMENTAL
+                            </span>
+                        </p>
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="w-1 h-1 rounded-full bg-pink-400/60" />

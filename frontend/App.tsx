@@ -625,23 +625,12 @@ function App() {
             </div>
           </div>
           <div className={`flex-1 overflow-hidden bg-black transition-opacity duration-300 ${explorerHeight < 80 ? 'opacity-0' : 'opacity-100'}`}>
-              {executionReport ? (
-                  <ExecutionExplorer 
-                      report={executionReport} 
-                      selectedBlockId={selectedBlockId}
-                      onBlockSelect={(id) => setSelectedBlockId(id)}
-                  />
-              ) : (
-                  <div className="h-full w-full flex flex-col items-center justify-center text-zinc-700 select-none p-10 text-center">
-                      <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center border border-white/5 mb-6 group-hover:border-white/10 transition-colors">
-                          <Terminal className="w-8 h-8 opacity-20" strokeWidth={1} />
-                      </div>
-                      <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-zinc-400 mb-2">No Active Stream</h3>
-                      <p className="text-[10px] opacity-40 max-w-[200px] leading-relaxed italic">
-                         Select a flow and initiate execution to begin receiving telemetry and insights.
-                      </p>
-                  </div>
-              )}
+              <ExecutionExplorer 
+                  report={executionReport} 
+                  selectedBlockId={selectedBlockId}
+                  onBlockSelect={(id) => setSelectedBlockId(id)}
+                  onClose={() => setIsExplorerOpen(false)}
+              />
           </div>
         </div>
 

@@ -1,7 +1,4 @@
-"""
-Block Type Mapper
-Maps AI-generated natural language block types to valid WebLens block types.
-"""
+from typing import Any, Dict
 
 # Mapping from common AI-generated names to valid WebLens block types
 BLOCK_TYPE_MAPPING = {
@@ -176,15 +173,57 @@ def normalize_block_type(block_type: str) -> str:
     return block_type
 
 
-def map_blocks(blocks: list) -> list:
+def inflate_element(element: Any) -> Dict[str, Any]:
+    """
+    Convert a simple string or incomplete element dict into a valid ElementRef-like dict.
+    """
+    import uuid
+    
+    if isinstance(element, str):
+        if not element or element.strip() == "":
+            return {}
+        
+        # If it's a string, we treat it as the 'name' and use 'any' as role
+        return {
+            "id": f"ai_ref_{uuid.uuid4().hex[:8]}",
+            "role": "any",
+            "name": element,
+            "name_source": "native",
+            "confidence": "high",
+            "intent_type": "semantic",
+            "metadata": {}
+        }
+    
+    if isinstance(element, dict):
+        # Already a dict, ensure it has the minimum required fields for Pydantic if possible
+        if "id" not in element:
+            element["id"] = f"ai_ref_{uuid.uuid4().hex[:8]}"
+        if "role" not in element:
+            element["role"] = "any"
+        if "name" not in element:
+            element["name"] = "unknown"
+        if "name_source" not in element:
+            element["name_source"] = "native"
+        if "confidence" not in element:
+            element["confidence"] = "high"
+        if "intent_type" not in element:
+            element["intent_type"] = "semantic"
+        if "metadata" not in element:
+            element["metadata"] = {}
+        return element
+        
+    return {}
+
+def map_blocks(blocks: list, agentic: bool = False) -> list:
     """
     Map a list of AI-generated blocks to valid WebLens blocks.
     
     Args:
         blocks: List of block dictionaries with 'type', 'label', 'params'
+        agentic: If True, inflate element strings into semantic refs.
         
     Returns:
-        List of blocks with normalized types
+        List of blocks with normalized types and optionally inflated elements.
     """
     mapped_blocks = []
     
@@ -195,10 +234,21 @@ def map_blocks(blocks: list) -> list:
         original_type = block['type']
         normalized_type = normalize_block_type(original_type)
         
+        # Create new params with inflated elements if in agentic mode
+        params = block.get('params', {}).copy()
+        if agentic and 'element' in params:
+            params['element'] = inflate_element(params['element'])
+            
+            # For blocks that use 'description' as a fallback, ensure it's set
+            if 'description' not in params and 'element' in params and isinstance(params['element'], dict):
+                params['description'] = params['element'].get('name')
+
         # Create new block with normalized type
         mapped_block = {
             **block,
-            'type': normalized_type
+            'id': block.get('id', f"ai_block_{uuid.uuid4().hex[:8]}"),
+            'type': normalized_type,
+            'params': params
         }
         
         mapped_blocks.append(mapped_block)
@@ -208,3 +258,6 @@ def map_blocks(blocks: list) -> list:
             print(f"Mapped block type: {original_type} -> {normalized_type}")
     
     return mapped_blocks
+
+import uuid # Ensure uuid is available for map_blocks too
+

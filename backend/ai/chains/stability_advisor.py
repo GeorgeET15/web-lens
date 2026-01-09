@@ -8,5 +8,5 @@ class StabilityAdvisorChain:
         self.template = prompt_path.read_text()
 
     async def run(self, runs_data: list) -> str:
-        prompt = self.template.format(runs_data_json=json.dumps(runs_data, indent=2))
+        prompt = self.template.replace("{runs_data_json}", json.dumps(runs_data, indent=2))
         return await self.provider.generate_text(prompt)

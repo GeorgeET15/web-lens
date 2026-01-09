@@ -14,8 +14,6 @@ class CompanionChain:
         insight_dict = insight.model_dump()
         clean_insight = strip_heavy_data(insight_dict)
         
-        prompt = self.template.format(
-            context_json=json.dumps(clean_insight, indent=2), 
-            query=query
-        )
+        prompt = self.template.replace("{context_json}", json.dumps(clean_insight, indent=2))\
+                             .replace("{query}", query)
         return await self.provider.generate_text(prompt)

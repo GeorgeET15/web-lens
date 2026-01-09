@@ -74,6 +74,10 @@ app = FastAPI(
 from ai.router import router as ai_router
 app.include_router(ai_router)
 
+# AI Capabilities
+from ai.router import router as ai_router
+app.include_router(ai_router)
+
 # AI Startup Diagnostic
 from ai.ai_service import ai_service
 logger.info(f"AI Capability Status: {'ENABLED' if ai_service.is_enabled() else 'DISABLED (Check .env for API keys)'}")
@@ -90,10 +94,22 @@ app.add_middleware(
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     logger.error(f"422 Unprocessable Entity for {request.url.path}: {exc.errors()}")
-    logger.debug(f"Request body: {await request.body()}")
+    try:
+        body = await request.body()
+        logger.debug(f"Request body: {body}")
+    except Exception:
+        pass
+        
+    # Fix: Pydantic v2 errors contain non-serializable 'ctx' objects (Exceptions)
+    # We must remove them before returning JSON
+    errors = exc.errors()
+    for error in errors:
+        error.pop('ctx', None)
+        error.pop('url', None)
+        
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors(), "body": str(exc.body)},
+        content={"detail": errors, "body": str(exc.body)},
     )
 
 
@@ -151,382 +167,22 @@ class FlowStateResponse(BaseModel):
     errors: List[str] = []
 
 
-# --- In-Memory State ---
-# Maps run_id -> Queue of events
-event_queues: Dict[str, queue.Queue] = {}
-# Maps run_id -> ExecutionReport
-from models import ExecutionReport
-execution_history: Dict[str, ExecutionReport] = {}
-# Maps env_id -> EnvironmentConfig
-environments: Dict[str, EnvironmentConfig] = {
-    "prod": EnvironmentConfig(id="prod", name="Production", variables={}), 
-    "staging": EnvironmentConfig(id="staging", name="Staging", variables={})
-}
-# Suite ID -> Status Object
-suite_executions: Dict[str, Any] = {}
+# --- Unified Execution Manager Integration ---
+from execution_manager import (
+    event_queues, 
+    execution_history, 
+    environments, 
+    suite_executions,
+    render_html_report,
+    clean_report_for_disk,
+    execute_flow_background,
+    start_execution as start_background_execution,
+    generate_pdf_report
+)
 
 
 # --- Helper Functions ---
-
-def clean_report_for_disk(report: Dict[str, Any]) -> Dict[str, Any]:
-    """Remove heavy base64 images from report for compact storage."""
-    import copy
-    report_copy = copy.deepcopy(report)
-    if 'blocks' in report_copy:
-        for block in report_copy['blocks']:
-            if 'screenshot' in block:
-                block['screenshot'] = None
-    if 'result' in report_copy and report_copy['result'] and 'screenshot' in report_copy['result']:
-        report_copy['result']['screenshot'] = None
-    return report_copy
-
-def render_html_report(report: Dict[str, Any]) -> str:
-    """Render a premium HTML report using the dedicated template."""
-    from datetime import datetime
-    run_id = report.get('run_id', 'unknown')
-    flow_name = report.get('flow_name', 'Untitled Flow')
-    success = report.get('success', False)
-    
-    # Load template
-    template_path = Path(__file__).parent / "report_template.html"
-    if not template_path.exists():
-        return f"<html><body style='background:#09090b;color:#fff;padding:40px;font-family:sans-serif;'><h1>WebLens Report</h1><p>Template file missing at {template_path}</p></body></html>"
-        
-    with open(template_path, "r") as f:
-        html = f.read()
-    
-    status_text = "PASSED" if success else "FAILED"
-    status_class = "success" if success else "failed"
-    
-    error_html = ""
-    if not success and report.get('error'):
-        err = report['error']
-        error_html = f"""
-        <div class="error-section">
-            <div class="error-title">{err.get('title', 'Execution Error')}</div>
-            <div class="error-details">
-                <strong>Reason:</strong> {err.get('reason', 'Unknown error')}<br/>
-                <strong>Intent:</strong> {err.get('intent', 'N/A')}
-            </div>
-            {f'<div class="error-suggestion"><strong>Suggestion:</strong> {err["suggestion"]}</div>' if err.get('suggestion') else ''}
-        </div>
-        """
-    
-    blocks_html = ""
-    for block in report.get('blocks', []):
-        b_type = block.get('block_type', 'unknown')
-        duration = block.get('duration_ms', 0)
-        b_status = block.get('status', 'success')
-        trace_items = "".join([f'<li class="trace-item">{t}</li>' for t in block.get('taf', {}).get('trace', [])])
-        
-        screenshot_html = ""
-        if block.get('screenshot'):
-            screenshot_html = f'<div class="screenshot-frame"><img src="{block["screenshot"]}" loading="lazy"/></div>'
-            
-        data_html = ""
-        if block.get('tier_2_evidence'):
-            evidence_json = json.dumps(block['tier_2_evidence'], indent=2)
-            data_html = f'<div class="data-evidence"><strong>Data Evidence:</strong><pre>{evidence_json}</pre></div>'
-            
-        blocks_html += f"""
-        <div class="block">
-            <div class="block-header">
-                <div class="block-info">
-                    <div class="block-status {b_status}"></div>
-                    <div class="block-type">{b_type}</div>
-                </div>
-                <div class="block-duration">{duration:.0f}ms</div>
-            </div>
-            <div class="block-content">
-                <ul class="trace-list">{trace_items}</ul>
-                {data_html}
-                {screenshot_html}
-            </div>
-        </div>
-        """
-        
-    timestamp = report.get('started_at', 0)
-    execution_time = datetime.fromtimestamp(timestamp).strftime('%B %d, %Y at %I:%M %p')
-    
-    html = html.replace('{{run_id}}', run_id)
-    html = html.replace('{{flow_name}}', flow_name)
-    html = html.replace('{{status_text}}', status_text)
-    html = html.replace('{{status_class}}', status_class)
-    html = html.replace('{{execution_time}}', execution_time)
-    html = html.replace('{{error_html}}', error_html)
-    html = html.replace('{{blocks_html}}', blocks_html)
-    
-    return html
-
-def generate_pdf_report(report: Dict[str, Any]) -> bytes:
-    """Generate a professional PDF report with embedded screenshots using ReportLab."""
-    from io import BytesIO
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.units import inch
-    from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, Table, TableStyle, PageBreak
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT
-    from datetime import datetime
-    import base64
-    
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
-    story = []
-    styles = getSampleStyleSheet()
-    
-    # Custom styles
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=24,
-        textColor=colors.HexColor('#6366f1'),
-        spaceAfter=12,
-        alignment=TA_CENTER
-    )
-    
-    heading_style = ParagraphStyle(
-        'CustomHeading',
-        parent=styles['Heading2'],
-        fontSize=14,
-        textColor=colors.HexColor('#4f46e5'),
-        spaceAfter=8,
-        spaceBefore=12
-    )
-    
-    # Title
-    flow_name = report.get('flow_name', 'Untitled Flow')
-    story.append(Paragraph(f"WebLens Execution Report", title_style))
-    story.append(Paragraph(f"{flow_name}", styles['Heading2']))
-    story.append(Spacer(1, 0.2*inch))
-    
-    # Metadata table
-    run_id = report.get('run_id', 'unknown')
-    success = report.get('success', False)
-    status_text = "PASSED" if success else "FAILED"
-    status_color = colors.green if success else colors.red
-    
-    timestamp = report.get('started_at', 0)
-    execution_time = datetime.fromtimestamp(timestamp).strftime('%B %d, %Y at %I:%M %p')
-    
-    metadata = [
-        ['Run ID:', run_id],
-        ['Status:', status_text],
-        ['Executed:', execution_time],
-    ]
-    
-    metadata_table = Table(metadata, colWidths=[1.5*inch, 4*inch])
-    metadata_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('TEXTCOLOR', (1, 1), (1, 1), status_color),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-    ]))
-    story.append(metadata_table)
-    story.append(Spacer(1, 0.3*inch))
-    
-    # Error section if failed
-    if not success and report.get('error'):
-        story.append(Paragraph("Failure Analysis", heading_style))
-        err = report['error']
-        error_text = f"<b>Error:</b> {err.get('title', 'Execution Error')}<br/>"
-        error_text += f"<b>Reason:</b> {err.get('reason', 'Unknown')}<br/>"
-        if err.get('suggestion'):
-            error_text += f"<b>Suggestion:</b> {err.get('suggestion')}"
-        story.append(Paragraph(error_text, styles['Normal']))
-        story.append(Spacer(1, 0.2*inch))
-    
-    # Blocks section
-    story.append(Paragraph("Execution Steps", heading_style))
-    
-    for idx, block in enumerate(report.get('blocks', []), 1):
-        b_type = block.get('block_type', 'unknown')
-        duration = block.get('duration_ms', 0)
-        b_status = block.get('status', 'success')
-        
-        # Block header
-        block_header = f"<b>Step {idx}: {b_type}</b> ({duration:.0f}ms) - {b_status.upper()}"
-        story.append(Paragraph(block_header, styles['Heading3']))
-        
-        # TAF trace
-        trace_items = block.get('taf', {}).get('trace', [])
-        if trace_items:
-            for trace in trace_items:
-                story.append(Paragraph(f"• {trace}", styles['Normal']))
-        
-        # Screenshot
-        if block.get('screenshot'):
-            try:
-                # Decode base64 screenshot
-                img_data = block['screenshot']
-                if img_data.startswith('data:image'):
-                    img_data = img_data.split(',')[1]
-                
-                img_buffer = BytesIO(base64.b64decode(img_data))
-                img = RLImage(img_buffer, width=5*inch, height=3*inch)
-                story.append(Spacer(1, 0.1*inch))
-                story.append(img)
-            except Exception as e:
-                story.append(Paragraph(f"<i>Screenshot unavailable: {str(e)}</i>", styles['Normal']))
-        
-        # Data evidence
-        if block.get('tier_2_evidence'):
-            story.append(Spacer(1, 0.1*inch))
-            story.append(Paragraph("<b>Data Evidence:</b>", styles['Normal']))
-            evidence_json = json.dumps(block['tier_2_evidence'], indent=2)
-            # Truncate if too long
-            if len(evidence_json) > 500:
-                evidence_json = evidence_json[:500] + "..."
-            story.append(Paragraph(f"<font name='Courier' size=8>{evidence_json}</font>", styles['Code']))
-        
-        story.append(Spacer(1, 0.2*inch))
-    
-    # Build PDF
-    doc.build(story)
-    pdf_bytes = buffer.getvalue()
-    buffer.close()
-    return pdf_bytes
-
-def execute_flow_background(run_id: str, flow_data: Dict[str, Any], headless: bool, 
-                            variables: Optional[Dict[str, str]] = None, 
-                            environment_id: Optional[str] = None,
-                            inline_environment: Optional[EnvironmentConfig] = None):
-    """Executes flow in background and pushes events to queue."""
-    logger.info(f"[{run_id}] Starting background execution")
-    logger.info(f"[{run_id}] Headless mode: {headless}")
-    logger.info(f"[{run_id}] Variables: {variables}")
-    logger.info(f"[{run_id}] Environment ID: {environment_id}")
-    
-    q = event_queues.get(run_id)
-    if not q:
-        logger.error(f"[{run_id}] Event queue not found!")
-        return
-
-    browser_engine = None
-    try:
-        # 1. Notify Start
-        logger.info(f"[{run_id}] Sending execution_start event")
-        q.put({"type": "execution_start", "data": {"run_id": run_id}})
-
-        # 2. Resolve final variable set
-        merged_variables = {}
-        
-        # A. Start with environment variables
-        env = inline_environment
-        if not env and environment_id:
-            env = environments.get(environment_id)
-            logger.info(f"[{run_id}] Loaded environment: {environment_id}")
-        
-        if env:
-            merged_variables.update(env.variables)
-            logger.info(f"[{run_id}] Applied environment variables: {env.variables}")
-            q.put({"type": "block_execution", "data": {
-                "block_id": "system",
-                "type": "trace",
-                "message": f"Environment '{env.name}' applied."
-            }})
-
-        # B. Layer on execution-specific variables (they override environment)
-        if variables:
-            merged_variables.update(variables)
-            logger.info(f"[{run_id}] Merged variables: {merged_variables}")
-
-        # 3. Parse Flow
-        logger.info(f"[{run_id}] Parsing flow graph...")
-        logger.debug(f"[{run_id}] Flow data: {json.dumps(flow_data, indent=2)}")
-        try:
-            flow = FlowGraph(**flow_data)
-            logger.info(f"[{run_id}] Flow parsed successfully. Entry block: {flow.entry_block}, Total blocks: {len(flow.blocks)}")
-        except ValidationError as e:
-            logger.error(f"[{run_id}] Flow validation failed: {e}")
-            q.put({"type": "error", "data": {"message": f"Invalid flow data: {e}"}})
-            return
-
-        # 4. Setup Engine
-        logger.info(f"[{run_id}] Initializing Selenium engine (headless={headless})...")
-        try:
-            browser_engine = SeleniumEngine(headless=headless)
-            logger.info(f"[{run_id}] Browser engine initialized successfully")
-        except Exception as e:
-            logger.error(f"[{run_id}] Failed to initialize browser engine: {e}", exc_info=True)
-            raise
-        
-        # 5. Define Callback for Real-Time Updates
-        def on_event(event_type, block_id, data):
-            logger.debug(f"[{run_id}] Event: {event_type} for block {block_id}: {data}")
-            # Add block_id to data if not present
-            data['block_id'] = block_id
-            # Push to stream
-            q.put({"type": "block_execution", "data": data})
-
-        # 6. Execute with Interpreter
-        logger.info(f"[{run_id}] Starting flow interpretation...")
-        interpreter = BlockInterpreter(browser_engine, on_event=on_event)
-        
-        try:
-            result = interpreter.execute_flow(flow, run_id=run_id, initial_variables=merged_variables)
-            logger.info(f"[{run_id}] Flow execution completed. Success: {result.success}")
-            if not result.success:
-                logger.warning(f"[{run_id}] Execution failed with message: {result.message}")
-        except Exception as e:
-            logger.error(f"[{run_id}] Interpreter execution failed: {e}", exc_info=True)
-            raise
-
-        # 7. Capture Final Report
-        if interpreter.context:
-            report = interpreter.context.report
-            flow_name_slug = (report.flow_name or 'untitled').replace(' ', '_').lower()
-            report.report_files = {
-                "json": f"{flow_name_slug}_report_{run_id}.json",
-                "html": f"{flow_name_slug}_report_{run_id}.html"
-            }
-            execution_history[run_id] = report
-            logger.info(f"[{run_id}] Report captured. Success: {report.success}, Total blocks executed: {len(report.blocks)}")
-            
-            # Persist reports to disk
-            try:
-                # A. Generate and save HTML (with images)
-                html_report_path = config.EXECUTIONS_DIR / f"{run_id}.html"
-                full_report_dict = report.model_dump(mode='json')
-                html_content = render_html_report(full_report_dict)
-                with open(html_report_path, "w") as f:
-                    f.write(html_content)
-                logger.info(f"[{run_id}] Persisted HTML report to {html_report_path}")
-
-                # B. Clean and save JSON (no images to keep file size small)
-                report_path = config.EXECUTIONS_DIR / f"{run_id}.json"
-                clean_report_dict = clean_report_for_disk(full_report_dict)
-                with open(report_path, "w") as f:
-                    json.dump(clean_report_dict, f, indent=2)
-                logger.info(f"[{run_id}] Persisted clean JSON report to {report_path}")
-            except Exception as pe:
-                logger.error(f"[{run_id}] Failed to persist reports: {pe}", exc_info=True)
-        else:
-            logger.warning(f"[{run_id}] No interpreter context available!")
-
-        if result.success:
-            logger.info(f"[{run_id}] Sending execution_complete (success)")
-            q.put({"type": "execution_complete", "data": {"result": "success", "run_id": run_id}})
-        else:
-            logger.info(f"[{run_id}] Sending execution_complete (failed)")
-            q.put({"type": "execution_complete", "data": {"result": "failed", "run_id": run_id}})
-
-    except Exception as e:
-        logger.error(f"[{run_id}] Execution failed with exception: {e}", exc_info=True)
-        q.put({"type": "error", "data": {"message": str(e)}})
-    finally:
-        if browser_engine:
-            logger.info(f"[{run_id}] Closing browser engine...")
-            try:
-                browser_engine.close()
-                logger.info(f"[{run_id}] Browser engine closed successfully")
-            except Exception as e:
-                logger.error(f"[{run_id}] Error closing browser: {e}")
-        # Signal stream end
-        logger.info(f"[{run_id}] Execution background task completed")
-        q.put(None)
+# (Logic moved to execution_manager.py)
 
 
 # --- Routes ---
@@ -787,11 +443,17 @@ async def inspector_websocket(websocket: WebSocket):
                         if not handles:
                              logger.info("Inspector window closed (no handles). Terminating WebSocket.")
                              active_inspector = None
+                             try:
+                                 await websocket.send_json({"type": "inspector_status", "status": "stopped"})
+                             except: pass
                              break
                     except Exception:
                         # If we can't even get handles, the driver might be dead or window closed
                         logger.info("WebDriver unreachable or window closed. Terminating.")
                         active_inspector = None
+                        try:
+                            await websocket.send_json({"type": "inspector_status", "status": "stopped"})
+                        except: pass
                         break
                     
                     # Otherwise, browser might be just busy or navigating, continue polling
@@ -988,20 +650,12 @@ async def start_execution(request: FlowExecutionRequest, background_tasks: Backg
             }
         )
     
-    # STEP 3: Flow is RUNNABLE - proceed with execution
-    run_id = str(uuid.uuid4())
-    event_queues[run_id] = queue.Queue()
-    
-    # Run in thread so we don't block
-    thread = Thread(target=execute_flow_background, args=(
-        run_id, 
+    # Hand off to unified execution manager
+    run_id = start_background_execution(
         request.flow, 
         request.headless, 
-        request.variables,
-        request.environment_id,
-        request.environment
-    ))
-    thread.start()
+        request.variables
+    )
     
     return ExecutionStartResponse(run_id=run_id, message="Execution started")
 

@@ -58,8 +58,11 @@ export const AIInsight: React.FC<AIInsightProps> = ({
           </div>
           
           <div className="flex-1">
-            <div className="font-black text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60">
-              {roleLabel || "AI Commentary (Non-Authoritative)"}
+            <div className="font-black text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60 flex items-center gap-2">
+              {roleLabel || "AI Commentary"}
+              <span className="px-1.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[7px] font-bold text-indigo-400">
+                EXPERIMENTAL
+              </span>
             </div>
             {isOpen && (
               <div className="text-[9px] text-zinc-600 font-medium italic mt-0.5">
