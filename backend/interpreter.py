@@ -8,6 +8,7 @@ Uses ElementResolver for robust, zero-code element finding.
 
 from typing import Dict, Any, List, Optional
 import time
+import re
 from models import (
     FlowGraph, Block, ExecutionResult,
     OpenPageBlock, ClickElementBlock, EnterTextBlock,
@@ -1386,9 +1387,12 @@ class BlockInterpreter:
                 self.context.emit_taf(channel, msg)
         
         if not found:
-             captured_urls = [r['url'] for r in all_traffic[-5:]] if all_traffic else []
+             # Capture a sample of unique URLs to help user debug
+             unique_urls = list(set([r['url'] for r in all_traffic]))
+             display_urls = unique_urls[:20] # Show first 20 unique to avoid huge logs
+             
              raise VerificationMismatchError(
-                f"Network request matching pattern '{pattern}' not found in logs after 10s. Captured {len(all_traffic)} requests. Last 5: {captured_urls}",
+                f"Network request matching pattern '{pattern}' not found in logs after 10s. Checked {len(all_traffic)} requests. \nSample of Checked URLs: {display_urls}",
                 expected=f"URL='{pattern}', Status={block.status_code}",
                 actual="Request not found in logs"
             )
@@ -1433,7 +1437,7 @@ class BlockInterpreter:
 
     def _execute_switch_tab(self, block: SwitchTabBlock) -> None:
         self.context.emit_taf("trace", f"Switching to {'newest tab' if block.to_newest else f'tab #{block.tab_index}'}")
-        self.engine.switch_tab(block.to_newest, block.tab_index)
+        self.engine.switch_to_tab(block.to_newest, block.tab_index)
 
     def _execute_ai_prompt(self, block: AIPromptBlock) -> None:
         """Executes a natural language prompt by calling the AgenticExecutor."""
