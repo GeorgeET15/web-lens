@@ -227,7 +227,9 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
     const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
     const [savedFlows, setSavedFlows] = useState<SavedFlowMetadata[]>([]);
     const [isLoadingSavedFlows, setIsLoadingSavedFlows] = useState(false);
+
     const [isProcessing, setIsProcessing] = useState(false);
+    const [processingMessage, setProcessingMessage] = useState('Processing...');
     
     // Block search
     const [blockSearchQuery, setBlockSearchQuery] = useState('');
@@ -758,6 +760,7 @@ const [dialogConfig, setDialogConfig] = useState<{
 
     const performSave = async (location: 'local' | 'cloud') => {
         setIsProcessing(true);
+        setProcessingMessage(location === 'cloud' ? 'Uploading to Cloud...' : 'Saving Locally...');
         try {
             const flow = FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, 1, currentFlowId || undefined, flowDescription);
             
@@ -823,6 +826,7 @@ const [dialogConfig, setDialogConfig] = useState<{
     const handleLoadFlow = async (id: string, isTemplate: boolean = false, source?: 'local' | 'cloud') => {
         let flow: FlowGraph | null = null;
         setIsProcessing(true);
+        setProcessingMessage('Loading Flow...');
         
         try {
             if (isTemplate) {
@@ -1649,7 +1653,10 @@ const [dialogConfig, setDialogConfig] = useState<{
             <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-[2px] animate-in fade-in duration-200">
                 <div className="bg-zinc-900/80 border border-white/10 rounded-2xl p-6 flex flex-col items-center gap-4 shadow-2xl">
                     <div className="w-10 h-10 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white animate-pulse">Processing...</span>
+                    <div className="flex items-center gap-2">
+                        {processingMessage.toLowerCase().includes('cloud') && <Globe className="w-4 h-4 text-indigo-400" />}
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white animate-pulse">{processingMessage}</span>
+                    </div>
                 </div>
             </div>
         )}

@@ -382,6 +382,8 @@ class BlockInterpreter:
             self.context.log(f" Action Failed: {e.intent} -> {e.reason}")
             
             # Map to UserFacingError
+            # Map to UserFacingError
+            # from models import ErrorCategory -- REMOVED (Use global)
             category = ErrorCategory.UNSUPPORTED_ACTION # Default
             if isinstance(e, (ElementMissingError, ElementHiddenError, ElementAmbiguousError)):
                 category = ErrorCategory.ELEMENT_RESOLUTION
@@ -443,8 +445,7 @@ class BlockInterpreter:
             
             # Detect Browser Disconnection
             if not user_error and ("no such window" in str(e).lower() or "not found" in str(e).lower()):
-                from failures import ErrorCategory
-                from errors import UserFacingError
+                # from errors import UserFacingError -- REMOVED (Use global from models)
                 user_error = UserFacingError(
                      title="Browser Disconnected",
                      intent="System Integrity Check",
