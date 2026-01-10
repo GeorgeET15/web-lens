@@ -814,9 +814,11 @@ class BlockInterpreter:
             self.context.log(f"DEBUG: Block {block_id} has no next_block. Flow complete.")
     
     def _execute_open_page(self, block: OpenPageBlock) -> None:
-        # Evidence-Compatible: URLs CANNOT use Saved Values (navigation targets are prohibited)
-        url = block.url
-        # Handle environment-aware relative URLs
+        """Execute the Open Page block."""
+        # Evidence-Compatible: RELAXED for environment variables
+        url = self._interpolate(block.url)
+        
+        # Handle environment-aware relative URLs (Fallthrough for legacy / usage)
         if url.startswith("/") and self.context and "BASE_URL" in self.context.saved_values:
             base_url = self.context.saved_values["BASE_URL"].rstrip("/")
             url = f"{base_url}{url}"

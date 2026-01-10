@@ -39,7 +39,7 @@ export const EnvironmentManager: React.FC<EnvironmentManagerProps> = ({
     });
 
     onAdd({
-      id: Math.random().toString(36).substr(2, 9),
+      id: '', // Backend will generate UUID
       name: newEnvName,
       variables
     });

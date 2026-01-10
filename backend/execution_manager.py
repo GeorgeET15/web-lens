@@ -22,10 +22,7 @@ logger = logging.getLogger(__name__)
 # --- Unified State ---
 event_queues: Dict[str, queue.Queue] = {}
 execution_history: Dict[str, ExecutionReport] = {}
-environments: Dict[str, EnvironmentConfig] = {
-    "prod": EnvironmentConfig(id="prod", name="Production", variables={}), 
-    "staging": EnvironmentConfig(id="staging", name="Staging", variables={})
-}
+# environments: Dict[str, EnvironmentConfig] = {} # Removed for Supabase persistence
 suite_executions: Dict[str, Any] = {}
 
 def clean_report_for_disk(report: Dict[str, Any]) -> Dict[str, Any]:
@@ -167,14 +164,22 @@ def execute_flow_background(run_id: str, flow_data: Dict[str, Any], headless: bo
         merged_variables = {}
         env = inline_environment
         if not env and environment_id:
-            env = environments.get(environment_id)
-            if env:
-                merged_variables.update(env.variables)
-                q.put({"type": "block_execution", "data": {
-                    "block_id": "system",
-                    "type": "trace",
-                    "message": f"Environment '{env.name}' applied."
-                }})
+            from database import db
+            if user_id:
+                try:
+                    resp = db.client.table("environments").select("*").eq("id", environment_id).eq("user_id", user_id).execute()
+                    if resp.data:
+                        env = EnvironmentConfig(**resp.data[0])
+                except Exception as e:
+                    logger.error(f"[{run_id}] Failed to fetch environment {environment_id}: {e}")
+            
+        if env:
+            merged_variables.update(env.variables)
+            q.put({"type": "block_execution", "data": {
+                "block_id": "system",
+                "type": "trace",
+                "message": f"Environment '{env.name}' applied."
+            }})
 
         if variables:
             merged_variables.update(variables)
@@ -268,6 +273,8 @@ def execute_flow_background(run_id: str, flow_data: Dict[str, Any], headless: bo
 
 def start_execution(flow_data: Dict[str, Any], headless: bool = True, 
                     variables: Optional[Dict[str, str]] = None, 
+                    environment_id: Optional[str] = None,
+                    inline_environment: Optional[EnvironmentConfig] = None,
                     user_id: Optional[str] = None) -> str:
     """Unified entry point for any flow execution."""
     run_id = str(uuid.uuid4())
@@ -278,8 +285,8 @@ def start_execution(flow_data: Dict[str, Any], headless: bool = True,
         flow_data, 
         headless, 
         variables,
-        None, # environment_id
-        None, # inline_environment
+        environment_id,
+        inline_environment,
         user_id
     ))
     thread.start()

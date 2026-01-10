@@ -786,10 +786,11 @@ class FlowGraph(BaseModel):
         for block in self.blocks:
             block_label = f"Block '{block.id}'"
             
-            # PROHIBITED: URLs (navigation targets)
+            # PROHIBITED: URLs (navigation targets) - RELAXED for environment variables
             if isinstance(block, OpenPageBlock):
-                if contains_variable(block.url):
-                    errors.append(f"{block_label}: Saved values cannot be used in URLs (navigation targets)")
+                pass # Allow placeholders in URLs for environment variables 🧘‍♂️
+                # if contains_variable(block.url):
+                #     errors.append(f"{block_label}: Saved values cannot be used in URLs (navigation targets)")
             
             # PROHIBITED: Control flow conditions
             if isinstance(block, (IfConditionBlock, RepeatUntilBlock)):

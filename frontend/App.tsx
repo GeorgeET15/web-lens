@@ -102,7 +102,12 @@ function Dashboard() {
   const fetchEnvironments = async () => {
     setIsLoadingEnvs(true);
     try {
-      const resp = await fetch(API_ENDPOINTS.ENVIRONMENTS);
+      const token = session?.access_token;
+      const resp = await fetch(API_ENDPOINTS.ENVIRONMENTS, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
       if (resp.ok) {
         const data = await resp.json();
         setEnvironments(data);
@@ -116,30 +121,42 @@ function Dashboard() {
 
   const handleAddEnvironment = async (env: Environment) => {
     try {
+      const token = session?.access_token;
       const resp = await fetch(API_ENDPOINTS.ENVIRONMENTS, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(env)
       });
       if (resp.ok) {
         fetchEnvironments();
+        addToast('success', 'Environment saved to cloud');
       }
     } catch (err) {
       console.error('Failed to add environment:', err);
+      addToast('error', 'Failed to save environment');
     }
   };
 
   const handleDeleteEnvironment = async (id: string) => {
     try {
+      const token = session?.access_token;
       const resp = await fetch(`${API_ENDPOINTS.ENVIRONMENTS}/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
       });
       if (resp.ok) {
         if (selectedEnvironmentId === id) setSelectedEnvironmentId('');
         fetchEnvironments();
+        addToast('success', 'Environment deleted');
       }
     } catch (err) {
       console.error('Failed to delete environment:', err);
+      addToast('error', 'Failed to delete environment');
     }
   };
 
@@ -569,6 +586,10 @@ function Dashboard() {
                     setExplorerHeight(400); // Automatically uncollapse
                 }}
                 lastReport={executionReport}
+                externalVariables={environments.find(e => e.id === selectedEnvironmentId)?.variables ? 
+                  Object.entries(environments.find(e => e.id === selectedEnvironmentId)!.variables).map(([k, _]) => ({ key: k, label: k })) : 
+                  []
+                }
                 />
             </div>
         )}

@@ -171,7 +171,7 @@ class FlowStateResponse(BaseModel):
 from execution_manager import (
     event_queues, 
     execution_history, 
-    environments, 
+    # environments,  # Removed for Supabase persistence
     suite_executions,
     render_html_report,
     clean_report_for_disk,
@@ -688,6 +688,8 @@ async def start_execution(
         request.flow, 
         request.headless, 
         request.variables,
+        environment_id=request.environment_id,
+        inline_environment=request.environment,
         user_id=user_id
     )
     
@@ -1073,23 +1075,41 @@ async def clear_execution_history(request: Request, user_id: Optional[str] = Dep
 
 
 @app.get("/api/environments", response_model=List[EnvironmentConfig])
-async def list_environments():
-    """List all available environments."""
-    return list(environments.values())
+async def list_environments(user_id: str = Depends(get_current_user)):
+    """List all available environments from Supabase."""
+    if not user_id:
+        return []
+    
+    from database import db
+    envs_data = db.get_environments(user_id)
+    return [EnvironmentConfig(**env) for env in envs_data]
 
 
 @app.post("/api/environments", response_model=EnvironmentConfig)
-async def create_environment(request: EnvironmentConfig):
-    """Create or update an environment."""
-    environments[request.id] = request
-    return request
+async def create_environment(request: EnvironmentConfig, user_id: str = Depends(get_current_user)):
+    """Create or update an environment in Supabase."""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+        
+    from database import db
+    env_data = db.save_environment(user_id, request.dict())
+    if not env_data:
+        raise HTTPException(status_code=500, detail="Failed to save environment")
+        
+    return EnvironmentConfig(**env_data)
 
 
 @app.delete("/api/environments/{env_id}")
-async def delete_environment(env_id: str):
-    """Delete an environment."""
-    if env_id in environments:
-        del environments[env_id]
+async def delete_environment(env_id: str, user_id: str = Depends(get_current_user)):
+    """Delete an environment from Supabase."""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+        
+    from database import db
+    success = db.delete_environment(user_id, env_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete environment")
+        
     return {"status": "deleted"}
 
 
@@ -1253,12 +1273,20 @@ def run_scenario_suite(suite_id: str, request: ScenarioExecutionRequest):
                 
                 # Build variables
                 env_vars = {}
-                if request.environment_id and request.environment_id in environments:
-                    env_config = environments[request.environment_id]
-                    env_vars = {
-                        "BASE_URL": env_config.base_url or "",
-                        **{v.key: v.value for v in getattr(env_config, 'variables', [])}
-                    }
+                if request.environment_id:
+                    # Fetch environment from DB
+                    from database import db
+                    try:
+                        resp = db.client.table("environments").select("*").eq("id", request.environment_id).execute()
+                        if resp.data:
+                            env_config = EnvironmentConfig(**resp.data[0])
+                            env_vars = {
+                                "BASE_URL": env_config.base_url or "",
+                                **env_config.variables
+                            }
+                    except Exception as e:
+                        logger.error(f"Failed to fetch environment {request.environment_id} for scenario: {e}")
+                
                 for var_name, value in scenario.values.items():
                     env_vars[var_name] = value
                 

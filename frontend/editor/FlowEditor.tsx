@@ -68,6 +68,7 @@ interface FlowEditorProps {
   setShowOnboarding?: (show: boolean) => void;
   onViewScenario?: (runId: string) => void;
   lastReport?: ExecutionReport | null;
+  externalVariables?: { key: string, label: string }[];
 }
 
 
@@ -208,7 +209,8 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
   ({ onFlowChange, onValidationError, onRequestPick, highlightBlockId, onBlockClick,
     showOnboarding,
     setShowOnboarding,
-    onViewScenario
+    onViewScenario,
+    externalVariables = []
   }, ref) => {
     // State for blocks
     const [blocks, setBlocks] = useState<EditorBlock[]>([]);
@@ -299,11 +301,12 @@ const [dialogConfig, setDialogConfig] = useState<{
 
     const normalizedSavedValues: SavedValue[] = useMemo(() => {
         const globalVars = globalVariables.map(v => ({ key: v.key, label: v.key || 'Untitled' }));
+        const envVars = externalVariables.map(v => ({ key: v.key, label: v.key || 'Environment' }));
         const blockVars = blocks
             .filter(b => (b.type === 'save_text' || b.type === 'save_page_content') && b.params.save_as?.key)
             .map(b => ({ key: b.params.save_as.key, label: b.params.save_as.label || b.params.save_as.key }));
-        return [...globalVars, ...blockVars].filter(v => v.key && v.key.trim() !== '');
-    }, [globalVariables, blocks]);
+        return [...globalVars, ...envVars, ...blockVars].filter(v => v.key && v.key.trim() !== '');
+    }, [globalVariables, blocks, externalVariables]);
 
     const byParent = useMemo(() => {
         const map = new Map<string, EditorBlock[]>();

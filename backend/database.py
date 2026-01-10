@@ -205,7 +205,60 @@ class SupabaseService:
             return True
             
         except Exception as e:
-            logger.error(f"Failed to clear history for {user_id}: {e}")
+            return False
+            
+    def get_environments(self, user_id: str) -> list:
+        """Fetches all environments for a specific user."""
+        if not self.is_enabled():
+            return []
+            
+        try:
+            resp = self.client.table("environments").select("*").eq("user_id", user_id).order("name").execute()
+            return resp.data or []
+        except Exception as e:
+            logger.error(f"Failed to fetch environments for {user_id}: {e}")
+            return []
+
+    def save_environment(self, user_id: str, env_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Saves or updates an environment for a user."""
+        if not self.is_enabled():
+            return None
+            
+        try:
+            data = {
+                "user_id": user_id,
+                "name": env_data.get("name"),
+                "browser": env_data.get("browser", "chrome"),
+                "headless": env_data.get("headless", True),
+                "window_width": env_data.get("window_width", 1920),
+                "window_height": env_data.get("window_height", 1080),
+                "base_url": env_data.get("base_url"),
+                "variables": env_data.get("variables", {}),
+                "updated_at": "now()"
+            }
+            
+            env_id = env_data.get("id")
+            if env_id:
+                data["id"] = env_id
+                
+            resp = self.client.table("environments").upsert(data).execute()
+            if resp.data and len(resp.data) > 0:
+                return resp.data[0]
+            return None
+        except Exception as e:
+            logger.error(f"Failed to save environment for {user_id}: {e}")
+            return None
+
+    def delete_environment(self, user_id: str, env_id: str) -> bool:
+        """Deletes an environment for a user."""
+        if not self.is_enabled():
+            return False
+            
+        try:
+            self.client.table("environments").delete().eq("id", env_id).eq("user_id", user_id).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete environment {env_id} for user {user_id}: {e}")
             return False
 
 db = SupabaseService()
