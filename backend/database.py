@@ -143,4 +143,69 @@ class SupabaseService:
             logger.error(f"Failed to fetch user stats: {e}")
             return stats
 
+    
+    def delete_execution(self, run_id: str, user_id: str) -> bool:
+        """Deletes an execution record and its associated screenshots."""
+        if not self.is_enabled():
+            return False
+
+        try:
+            logger.info(f"Deleting execution {run_id} from Supabase...")
+            
+            # 1. Delete Screenshots from Storage
+            # List files first (Supabase Storage doesn't support recursive delete by folder easily)
+            # Assuming 'run_id' is the folder name
+            try:
+                # List files in the folder
+                files_list = self.client.storage.from_("screenshots").list(run_id)
+                if files_list:
+                    files_to_delete = [f"{run_id}/{f['name']}" for f in files_list]
+                    if files_to_delete:
+                        self.client.storage.from_("screenshots").remove(files_to_delete)
+                        logger.info(f"Deleted {len(files_to_delete)} screenshots for {run_id}")
+            except Exception as storage_e:
+                logger.warning(f"Failed to clean up storage for {run_id}: {storage_e}")
+
+            # 2. Delete Record from DB
+            self.client.table("executions").delete().eq("id", run_id).eq("user_id", user_id).execute()
+            logger.info(f"Deleted execution record {run_id} from DB")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to delete execution {run_id}: {e}")
+            return False
+
+    def clear_user_history(self, user_id: str) -> bool:
+        """Clears ALL execution history for a user."""
+        if not self.is_enabled():
+            return False
+            
+        try:
+            logger.info(f"Clearing history for user {user_id}...")
+            
+            # 1. Get all execution IDs to clean storage
+            # Note: For large datasets, this might need pagination.
+            resp = self.client.table("executions").select("id").eq("user_id", user_id).execute()
+            run_ids = [row['id'] for row in resp.data]
+            
+            # 2. Clean Storage (Best effort)
+            for rid in run_ids:
+                try:
+                    files_list = self.client.storage.from_("screenshots").list(rid)
+                    if files_list:
+                        files_to_delete = [f"{rid}/{f['name']}" for f in files_list]
+                        if files_to_delete:
+                            self.client.storage.from_("screenshots").remove(files_to_delete)
+                except Exception:
+                    continue # Skip errors to proceed with next
+            
+            # 3. Delete All Records
+            self.client.table("executions").delete().eq("user_id", user_id).execute()
+            logger.info(f"Cleared {len(run_ids)} executions for {user_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to clear history for {user_id}: {e}")
+            return False
+
 db = SupabaseService()

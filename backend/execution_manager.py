@@ -284,3 +284,66 @@ def start_execution(flow_data: Dict[str, Any], headless: bool = True,
     ))
     thread.start()
     return run_id
+
+def delete_execution_data(run_id: str, user_id: Optional[str] = None) -> bool:
+    """Permanently deletes an execution record from memory, disk, and cloud."""
+    logger.info(f"[{run_id}] Deleting execution data...")
+    
+    # 1. Remove from Queue/Memory
+    if run_id in execution_history:
+        del execution_history[run_id]
+        
+    if run_id in event_queues:
+        # If running, this might detach listeners but not kill thread.
+        # Ideally we shouldn't delete running executions without stopping them first.
+        del event_queues[run_id]
+
+    # 2. Remove Local Files
+    try:
+        json_path = config.EXECUTIONS_DIR / f"{run_id}.json"
+        if json_path.exists():
+            os.remove(json_path)
+            
+        html_path = config.EXECUTIONS_DIR / f"{run_id}.html"
+        if html_path.exists():
+            os.remove(html_path)
+    except Exception as e:
+        logger.error(f"[{run_id}] Failed to delete local files: {e}")
+
+    # 3. Remove from Cloud (if configured)
+    from database import db
+    if db.is_enabled() and user_id:
+        try:
+            db.delete_execution(run_id, user_id)
+        except Exception as e:
+            logger.error(f"[{run_id}] Failed to delete from Supabase: {e}")
+            
+    return True
+
+def clear_all_executions(user_id: Optional[str] = None) -> bool:
+    """Permanently clears ALL execution history."""
+    logger.info("Clearing ALL execution history...")
+    
+    # 1. Clear Memory
+    execution_history.clear()
+    # Note: We don't clear event_queues as that would break active connections
+    
+    # 2. Clear Local Disk
+    try:
+        if config.EXECUTIONS_DIR.exists():
+            # Delete all .json and .html files
+            for file in config.EXECUTIONS_DIR.glob("*"):
+                if file.suffix in ['.json', '.html']:
+                    try:
+                        os.remove(file)
+                    except Exception:
+                        pass
+    except Exception as e:
+        logger.error(f"Failed to clear local executions directory: {e}")
+
+    # 3. Clear Cloud
+    from database import db
+    if db.is_enabled() and user_id:
+        db.clear_user_history(user_id)
+        
+    return True

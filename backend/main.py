@@ -177,7 +177,9 @@ from execution_manager import (
     clean_report_for_disk,
     execute_flow_background,
     start_execution as start_background_execution,
-    generate_pdf_report
+    generate_pdf_report,
+    delete_execution_data,
+    clear_all_executions
 )
 
 
@@ -1043,7 +1045,31 @@ async def list_executions(user_id: Optional[str] = Depends(get_current_user)):
     return sorted_executions[:50]
 
 
-# Cloud publishing endpoint removed in pivot to free model
+    
+    return sorted_executions[:50]
+
+
+@app.delete("/api/executions/{run_id}")
+async def delete_execution(run_id: str, request: Request, user_id: Optional[str] = Depends(get_current_user)):
+    """Delete a specific execution."""
+    # We call execution_manager which handles local + cloud
+    success = delete_execution_data(run_id, user_id)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete execution")
+        
+    return {"status": "deleted", "run_id": run_id}
+
+
+@app.delete("/api/executions")
+async def clear_execution_history(request: Request, user_id: Optional[str] = Depends(get_current_user)):
+    """Clear ALL execution history."""
+    success = clear_all_executions(user_id)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to clear history")
+        
+    return {"status": "cleared"}
 
 
 @app.get("/api/environments", response_model=List[EnvironmentConfig])

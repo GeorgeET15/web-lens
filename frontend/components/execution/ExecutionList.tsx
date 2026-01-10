@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { 
   CheckCircle2, XCircle, Clock, 
-  Search 
+  Search, Trash2
 } from 'lucide-react';
 import { API_ENDPOINTS } from '../../config/api';
 import { ExecutionSummary } from '../../types/execution';
 import { cn } from '../../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { Skeleton } from '../Skeleton';
+import { supabase } from '../../lib/supabase';
+import { ConfirmationDialog } from '../ConfirmationDialog';
 
 interface Props {
   onSelect: (runId: string) => void;
@@ -15,7 +17,7 @@ interface Props {
   className?: string;
 }
 
-export const ExecutionList: React.FC<Props> = ({ 
+const ExecutionList: React.FC<Props> = ({ 
   onSelect, 
   selectedRunId,
   className 
@@ -24,23 +26,125 @@ export const ExecutionList: React.FC<Props> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
+
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
 
   useEffect(() => {
     fetchRuns();
+    
+    // Set up polling for real-time updates
+    const interval = setInterval(() => {
+        fetchRuns(true); // silent fetch
+    }, 10000);
+
+    return () => clearInterval(interval);
   }, []);
 
-  const fetchRuns = async () => {
+  const fetchRuns = async (isPolling = false) => {
     try {
-      setIsLoading(true);
-      const res = await fetch(API_ENDPOINTS.EXECUTIONS); // Verify this endpoint exists in api.ts or use string
+      if (!isPolling) setIsLoading(true);
+      const res = await fetch(API_ENDPOINTS.EXECUTIONS); 
       if (!res.ok) throw new Error('Failed to fetch execution history');
       const data = await res.json();
       setRuns(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      if (!isPolling) setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
-      setIsLoading(false);
+      if (!isPolling) setIsLoading(false);
     }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, runId: string) => {
+    e.stopPropagation();
+    if (deletingId) return;
+
+    setConfirmDialog({
+        isOpen: true,
+        title: 'Delete Execution',
+        message: 'Are you sure you want to delete this execution trace? This cannot be undone.',
+        isDestructive: true,
+        onConfirm: async () => {
+            setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+            try {
+                setDeletingId(runId);
+                
+                const { data: { session } } = await supabase.auth.getSession();
+                const headers: Record<string, string> = {};
+                if (session?.access_token) {
+                    headers['Authorization'] = `Bearer ${session.access_token}`;
+                }
+
+                const res = await fetch(`${API_ENDPOINTS.EXECUTIONS}/${runId}`, {
+                    method: 'DELETE',
+                    headers
+                });
+                
+                if (!res.ok) throw new Error('Failed to delete');
+                
+                // Optimistic update
+                setRuns(prev => prev.filter(r => r.run_id !== runId));
+                (window as any).addToast?.('success', 'Execution trace deleted');
+
+            } catch (err) {
+                console.error('Delete failed:', err);
+                (window as any).addToast?.('error', 'Failed to delete execution trace');
+            } finally {
+                setDeletingId(null);
+            }
+        }
+    });
+  };
+
+  const handleClearHistory = async () => {
+    if (isClearing) return;
+
+    setConfirmDialog({
+        isOpen: true,
+        title: 'Clear History',
+        message: 'DANGER: This will permanently delete ALL execution history, including screenshots and logs. This action CANNOT be undone.',
+        isDestructive: true,
+        onConfirm: async () => {
+            setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+            try {
+                setIsClearing(true);
+                
+                const { data: { session } } = await supabase.auth.getSession();
+                const headers: Record<string, string> = {};
+                if (session?.access_token) {
+                    headers['Authorization'] = `Bearer ${session.access_token}`;
+                }
+
+                const res = await fetch(API_ENDPOINTS.EXECUTIONS, {
+                    method: 'DELETE',
+                    headers
+                });
+
+                if (!res.ok) throw new Error('Failed to clear history');
+
+                setRuns([]);
+                (window as any).addToast?.('success', 'Execution history cleared');
+                
+            } catch (err) {
+                console.error('Clear history failed:', err);
+                (window as any).addToast?.('error', 'Failed to clear execution history');
+            } finally {
+                setIsClearing(false);
+            }
+        }
+    });
   };
 
   const filteredRuns = runs.filter(run => {
@@ -54,8 +158,8 @@ export const ExecutionList: React.FC<Props> = ({
 
   return (
     <div className={cn("flex flex-col h-full bg-black overflow-hidden", className)}>
-      {/* List Header (Filter Only) */}
-      <div className="p-3 border-b border-zinc-900 bg-black/20">
+      {/* List Header (Filter + Clear) */}
+      <div className="p-3 border-b border-zinc-900 bg-black/20 flex flex-col gap-2">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-600" />
           <input 
@@ -69,6 +173,21 @@ export const ExecutionList: React.FC<Props> = ({
             {filteredRuns.length} Match
           </div>
         </div>
+        
+        {filteredRuns.length > 0 && (
+            <button 
+                onClick={handleClearHistory}
+                disabled={isClearing}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded border border-rose-500/10 bg-rose-500/5 hover:bg-rose-500/10 hover:border-rose-500/20 text-rose-500/60 hover:text-rose-400 transition-colors text-[9px] font-medium"
+            >
+                {isClearing ? (
+                    <Clock className="w-3 h-3 animate-spin" />
+                ) : (
+                    <Trash2 className="w-3 h-3" />
+                )}
+                Clear History
+            </button>
+        )}
       </div>
 
       {/* List */}
@@ -91,7 +210,7 @@ export const ExecutionList: React.FC<Props> = ({
         ) : error ? (
           <div className="p-8 text-center text-rose-500/80">
              <p className="text-[10px]">{error}</p>
-             <button onClick={fetchRuns} className="mt-2 text-[9px] underline">Retry</button>
+             <button onClick={() => fetchRuns()} className="mt-2 text-[9px] underline">Retry</button>
           </div>
         ) : filteredRuns.length === 0 ? (
           <div className="p-8 text-center text-zinc-600">
@@ -101,22 +220,41 @@ export const ExecutionList: React.FC<Props> = ({
           <div className="divide-y divide-white/5">
             {filteredRuns.map(run => {
               const isSelected = run.run_id === selectedRunId;
+              const isDeleting = deletingId === run.run_id;
               
               return (
                 <button
                   key={run.run_id}
                   onClick={() => onSelect(run.run_id)}
+                  disabled={isDeleting}
                   className={cn(
                     "w-full text-left p-3 hover:bg-white/5 transition-all group relative",
-                    isSelected && "bg-white/5"
+                    isSelected && "bg-white/5",
+                    isDeleting && "opacity-50 pointer-events-none"
                   )}
                 >
                   {isSelected && (
                     <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-indigo-500" />
                   )}
                   
+                  {/* Hover Delete Button */}
+                  <div className="absolute right-2 top-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div 
+                            role="button"
+                            onClick={(e) => handleDelete(e, run.run_id)}
+                            className="p-1.5 rounded hover:bg-rose-500/20 text-zinc-600 hover:text-rose-400 transition-colors"
+                            title="Delete Trace"
+                        >
+                            {isDeleting ? (
+                                <Clock className="w-3 h-3 animate-spin text-zinc-500" />
+                            ) : (
+                                <Trash2 className="w-3 h-3" />
+                            )}
+                        </div>
+                  </div>
+                  
                   <div className="flex items-start justify-between gap-3 mb-1">
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 pr-6"> {/* Add padding for delete button space */}
                       <div className="flex items-center gap-2 mb-1">
                          {run.success ? (
                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500/80 flex-none" />
@@ -158,6 +296,18 @@ export const ExecutionList: React.FC<Props> = ({
           </div>
         )}
       </div>
+      
+      <ConfirmationDialog 
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        isDestructive={confirmDialog.isDestructive}
+        confirmLabel={confirmDialog.title.includes('Clear') ? 'Clear All' : 'Delete'}
+      />
     </div>
   );
 };
+
+export default ExecutionList;
