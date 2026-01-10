@@ -5,7 +5,7 @@ This module is responsible for resolving semantic ElementRefs into actual DOM el
 STRICT ZERO-CODE IMPLEMENTATION: No CSS/XPath selectors are used. Resolution is purely semantic.
 """
 
-from typing import Any, Optional, Dict
+from typing import Any, Optional, Dict, List
 import os
 from models import ElementRef
 from browser_engine import BrowserEngine, BrowserEngineError
@@ -165,19 +165,24 @@ function findSemantic(ref) {
         return 0;
     });
     
-    const best = candidates[0];
-    return { 
-        element: best.el, 
-        score: best.score,
+    // Return top 5 candidates for debugging transparency
+    const topCandidates = candidates.slice(0, 5).map(cand => ({
+        element: cand.el,
+        score: cand.score,
         actuals: {
-            role: getRole(best.el),
-            name: getName(best.el),
-            testId: best.el.getAttribute('data-testid') || best.el.getAttribute('data-test-id') || best.el.getAttribute('data-cy') || best.el.getAttribute('data-qa'),
-            ariaLabel: best.el.getAttribute('aria-label'),
-            placeholder: best.el.getAttribute('placeholder'),
-            title: best.el.title || best.el.getAttribute('title'),
-            tagName: best.el.tagName.toLowerCase()
+            role: getRole(cand.el),
+            name: getName(cand.el),
+            testId: cand.el.getAttribute('data-testid') || cand.el.getAttribute('data-test-id') || cand.el.getAttribute('data-cy') || cand.el.getAttribute('data-qa'),
+            ariaLabel: cand.el.getAttribute('aria-label'),
+            placeholder: cand.el.getAttribute('placeholder'),
+            title: cand.el.title || cand.el.getAttribute('title'),
+            tagName: cand.el.tagName.toLowerCase()
         }
+    }));
+
+    return { 
+        candidates: topCandidates,
+        best: topCandidates[0] || null
     };
 }
 return findSemantic(arguments[0]);
@@ -255,7 +260,18 @@ function findInRegion(ref) {
         return {error: 'multiple_matches', count: matches.length, region: targetRegion, role: targetRole};
     }
     
-    return {element: matches[0]};
+    return {
+        element: matches[0],
+        actuals: {
+            role: getRole(matches[0]),
+            tagName: matches[0].tagName.toLowerCase(),
+            testId: matches[0].getAttribute('data-testid') || matches[0].getAttribute('data-test-id') || matches[0].getAttribute('data-cy') || matches[0].getAttribute('data-qa'),
+            ariaLabel: matches[0].getAttribute('aria-label'),
+            placeholder: matches[0].getAttribute('placeholder'),
+            title: matches[0].title || matches[0].getAttribute('title'),
+            name: matches[0].innerText?.trim().toLowerCase() || ""
+        }
+    };
 }
 return findInRegion(arguments[0]);
 """
@@ -266,10 +282,10 @@ class ElementResolver:
     Using Multi-Attribute Weighted Scoring (MAWS).
     """
     
-    def resolve(self, engine: BrowserEngine, ref: ElementRef) -> tuple[Any, float, Optional[Dict[str, Any]]]:
+    def resolve(self, engine: BrowserEngine, ref: ElementRef) -> tuple[Any, float, Optional[Dict[str, Any]], List[Dict[str, Any]]]:
         """
         Resolve an element using structural (void), region-scoped (user-declared), or MAWS (native) strategy.
-        Returns a tuple of (element_handle, confidence_score, actual_attributes).
+        Returns a tuple of (element_handle, confidence_score, actual_attributes, candidates).
         """
         # Check if this is a structural intent element (semantic void)
         is_structural = hasattr(ref, 'intent_type') and ref.intent_type == 'structural'
@@ -277,7 +293,8 @@ class ElementResolver:
         if is_structural:
             # Use structural resolver for semantically void elements
             structural_resolver = StructuralResolver()
-            return structural_resolver.resolve(engine, ref)
+            handle, score, actuals = structural_resolver.resolve(engine, ref)
+            return handle, score, actuals, []
         
         # Check if this is a user-declared element with regional context
         is_user_declared = hasattr(ref, 'name_source') and ref.name_source == 'user_declared'
@@ -315,7 +332,7 @@ class ElementResolver:
                 # Success - extract element
                 if isinstance(result, dict) and 'element' in result:
                     # User-declared regional matches are considered high confidence if found
-                    return result['element'], 1.0, None
+                    return result['element'], 1.0, result.get('actuals'), []
                     
             except BrowserEngineError:
                 raise
@@ -336,14 +353,25 @@ class ElementResolver:
             "tagName": ref.metadata.get("tagName"),
             "anchors": ref.metadata.get("anchors")
         }
-
+    
         try:
             result = engine.execute_script(JS_FIND_SEMANTIC, ref_data)
-            if result and isinstance(result, dict) and 'element' in result:
+            if result and isinstance(result, dict) and 'best' in result:
+                best = result['best']
+                raw_candidates = result.get('candidates', [])
+                
+                # Strip live WebElement handles for serializability in reports
+                candidates = []
+                for cand in raw_candidates:
+                    c = cand.copy()
+                    if 'element' in c:
+                        del c['element']
+                    candidates.append(c)
+                
                 # Normalize score: Assume 20+ is "Healthy High" (1.0), Scale 5-20
-                raw_score = result.get('score', 0)
+                raw_score = best.get('score', 0)
                 norm_score = min(1.0, raw_score / 20.0) if raw_score > 0 else 0
-                return result['element'], norm_score, result.get('actuals')
+                return best['element'], norm_score, best.get('actuals'), candidates
         except Exception as e:
             # Check if it's a browser error or just not found
             if isinstance(e, BrowserEngineError):

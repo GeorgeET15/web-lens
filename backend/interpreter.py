@@ -68,6 +68,7 @@ class InterpreterContext:
         self.current_evidence: Optional[Any] = None
         self.current_block_score: Optional[float] = None
         self.current_block_actuals: Optional[Dict[str, Any]] = None
+        self.current_block_candidates: List[Dict[str, Any]] = []
         
         # Execution Insight Report
         self.report = ExecutionReport(
@@ -282,9 +283,13 @@ class BlockInterpreter:
         # Attempt to find the element immediately without triggering expensive stability guards.
         # This drastically improves speed for static pages and fast UI.
         try:
-            handle, score, actuals = self.resolver.resolve(self.engine, target_ref)
+            handle, score, actuals, candidates = self.resolver.resolve(self.engine, target_ref)
             if handle:
                 self.context.emit_taf("trace", f"Fast-Path: Element found instantly. Semantic confidence: {score:.2f}")
+                # Emit candidates for debugging
+                if candidates:
+                    self.context.emit_taf("semantic_candidates", candidates)
+                
                 # TRIGGER HUD FOR FAST-PATH
                 self._trigger_hud_intent(handle, target_ref, score, strategy_desc, name_source)
                 
@@ -292,6 +297,7 @@ class BlockInterpreter:
                 if hasattr(self, 'context'):
                     self.context.current_block_score = score
                     self.context.current_block_actuals = actuals
+                    self.context.current_block_candidates = candidates
                 
                 return handle
         except Exception:
@@ -308,8 +314,11 @@ class BlockInterpreter:
         for attempt in range(max_retries):
             try:
                 # Use engine-agnostic resolver logic
-                handle, score, actuals = self.resolver.resolve(self.engine, target_ref)
+                handle, score, actuals, candidates = self.resolver.resolve(self.engine, target_ref)
                 if handle:
+                    if candidates:
+                        self.context.emit_taf("semantic_candidates", candidates)
+                    
                     # Decrease score slightly per attempt if it's not already low
                     final_score = max(0.2, score - (attempt * 0.05))
                     
@@ -320,6 +329,7 @@ class BlockInterpreter:
                     if hasattr(self, 'context'):
                         self.context.current_block_score = final_score
                         self.context.current_block_actuals = actuals
+                        self.context.current_block_candidates = candidates
 
                     # TRIGGER HUD FOR RETRY-PATH
                     self._trigger_hud_intent(handle, target_ref, final_score, strategy_desc, name_source)
@@ -756,6 +766,7 @@ class BlockInterpreter:
         self.context.flush_taf()
         self.context.current_block_score = None
         self.context.current_block_actuals = None
+        self.context.current_block_candidates = []
         
         try:
             if isinstance(block, OpenPageBlock):
@@ -865,6 +876,7 @@ class BlockInterpreter:
                 screenshot=screenshot,
                 confidence_score=self.context.current_block_score,
                 actual_attributes=self.context.current_block_actuals,
+                semantic_candidates=getattr(self.context, 'current_block_candidates', []),
                 tier_2_evidence=evidence
             )
             self.context.add_block_execution(execution_record)
@@ -1065,8 +1077,11 @@ class BlockInterpreter:
     
     def _execute_assert_visible(self, block: AssertVisibleBlock) -> None:
         # Interpreter assumes completeness - validation happened at gate
-        handle = self.resolver.resolve(self.engine, block.element)
+        handle, score, actuals, candidates = self.resolver.resolve(self.engine, block.element)
         is_visible = self.engine.is_element_visible_handle(handle) if handle else False
+        
+        if candidates:
+             self.context.emit_taf("semantic_candidates", candidates)
         
         taf = TAFRegistry.assert_visible(block.element.name or "element", is_visible)
         for channel, msgs in taf.items():

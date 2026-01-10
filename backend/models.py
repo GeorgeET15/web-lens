@@ -840,6 +840,7 @@ class ErrorCategory(str, Enum):
     TIMING_STATE = "Timing Issue"
     LOGIC = "Logic Error"
     UNSUPPORTED_ACTION = "Unsupported Action"
+    SYSTEM = "System Error"
 
 class UserFacingError(BaseModel):
     """Structured error for user consumption (Canonical Failure Model)."""
@@ -879,6 +880,7 @@ class BlockExecution(BaseModel):
     message: Optional[str] = None
     confidence_score: Optional[float] = None
     actual_attributes: Optional[Dict[str, Any]] = None
+    semantic_candidates: List[Dict[str, Any]] = Field(default_factory=list)
     tier_2_evidence: Optional[Any] = None
 
 class TaskStatus(str, Enum):

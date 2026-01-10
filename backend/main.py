@@ -346,15 +346,17 @@ async def heal_flow_step(
         element['name'] = actuals.get('name', element['name'])
         element['role'] = actuals.get('role', element['role'])
         
-        # Merge metadata (testId, etc)
+        # Merge metadata (testId, ariaLabel, etc)
         if 'metadata' not in element:
             element['metadata'] = {}
             
-        if actuals.get('testId'):
-            element['metadata']['testId'] = actuals['testId']
+        # Comprehensive Healing: Capture all semantic signals
+        for attr in ['testId', 'ariaLabel', 'placeholder', 'title', 'tagName']:
+            if actuals.get(attr):
+                element['metadata'][attr] = actuals[attr]
         
         # Add audit trail
-        element['metadata']['last_healed_at'] = time.time()
+        element['metadata']['last_healed_at'] = int(time.time())
         element['metadata']['previous_confidence'] = target_exec.get('confidence_score')
     
     # 4. Save Flow

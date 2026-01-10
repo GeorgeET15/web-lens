@@ -35,7 +35,9 @@ export const API_ENDPOINTS = {
   // Health & Metadata
   HEALTH: 'http://localhost:8000/api/health',
   BLOCKS_TYPES: 'http://localhost:8000/api/blocks/types',
-
+  
+  // Flows
+  FLOWS: 'http://localhost:8000/api/flows',
 };
 
 export const SAMPLE_FLOW = {
