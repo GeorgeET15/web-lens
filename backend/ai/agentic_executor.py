@@ -28,6 +28,13 @@ class AgenticExecutor:
         Returns the planned blocks and metadata.
         """
         logger.info(f"[EXPERIMENTAL] Agentic Planning: Starting for intent: '{user_intent}'")
+        if existing_engine:
+            try:
+                # CRITICAL: Ensure HUD is injected before logging
+                existing_engine._ensure_hud_injected()
+                existing_engine.log_hud(f"AI MISSION: {user_intent}")
+            except Exception as e:
+                logger.warning(f"HUD injection failed: {e}")
         
         # Perception Phase (Use existing engine if provided, else headless)
         engine = existing_engine or SeleniumEngine(headless=True)
@@ -42,9 +49,14 @@ class AgenticExecutor:
             page_context = "Unknown (Initial navigation failed or not provided)"
             if target_url:
                 try:
-                    logger.info(f"[EXPERIMENTAL] Perception Phase: Navigating to {target_url}...")
+                    msg = f"Navigating to {target_url}..."
+                    logger.info(f"[EXPERIMENTAL] Perception Phase: {msg}")
+                    if existing_engine: existing_engine.log_hud(msg)
+                    
                     engine.open_page(target_url)
                     time.sleep(2) # Wait for redirects/SPA stability
+                    
+                    if existing_engine: existing_engine.log_hud("Perceiving page structure...")
                     page_context = self._perceive_page(engine)
                     logger.info("Perception Phase: Context captured.")
                 except Exception as e:
@@ -52,7 +64,10 @@ class AgenticExecutor:
             else:
                 # No navigation requested, perceive current state of the existing engine
                 try:
-                    logger.info("Perception Phase: Perceiving current page state...")
+                    msg = "Perceiving current page state..."
+                    logger.info(msg)
+                    if existing_engine: existing_engine.log_hud(msg)
+                    
                     page_context = self._perceive_page(engine)
                     
                     # Ensure context is not just an empty string
@@ -65,8 +80,10 @@ class AgenticExecutor:
                     logger.warning(f"Current page perception failed: {e}. Planning blindly.")
 
             # 2. Plan Phase (with context)
+            if existing_engine: existing_engine.log_hud("AI Planning: Solving mission...")
             plan_response = await self.ai_service.plan_agentic(user_intent, page_context=page_context)
             logger.info(f"[EXPERIMENTAL] Agentic Planning: Plan received (len={len(plan_response)})")
+            if existing_engine: existing_engine.log_hud("Plan received. Initializing segment.")
             
             # 3. Extract Blocks
             blocks = self._extract_blocks(plan_response)

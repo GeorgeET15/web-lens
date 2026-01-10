@@ -216,6 +216,30 @@ class BrowserEngine(ABC):
             index: If newest is False, switch to index
         """
         pass
+    @abstractmethod
+    def get_element_rect(self, handle: Any) -> Dict[str, float]:
+        """Get precise sub-pixel coordinates and dimensions of an element."""
+        pass
+
+    @abstractmethod
+    def show_hud_intent(self, data: Dict[str, Any]) -> None:
+        """Call the HUD overlay to visualize agent intent."""
+        pass
+
+    @abstractmethod
+    def hide_hud_intent(self) -> None:
+        """Hide the HUD intent reticle."""
+        pass
+
+    @abstractmethod
+    def log_hud(self, message: str) -> None:
+        """Log a message to the HUD ticker tape."""
+        pass
+    
+    @abstractmethod
+    def update_hud_inventory(self, data: Dict[str, Any]) -> None:
+        """Update the HUD variable inspector."""
+        pass
 
 
 class SeleniumEngine(BrowserEngine):
@@ -241,6 +265,13 @@ class SeleniumEngine(BrowserEngine):
         self._network_id_map: Dict[str, Dict[str, Any]] = {}
         
         self._initialize_driver()
+        
+        # HUD Script Cache
+        self._hud_script = ""
+        hud_script_path = os.path.join(os.path.dirname(__file__), "hud_overlay.js")
+        if os.path.exists(hud_script_path):
+             with open(hud_script_path, "r") as f:
+                 self._hud_script = f.read()
     
     def _initialize_driver(self) -> None:
         """Initialize Chrome WebDriver with options."""
@@ -1194,3 +1225,75 @@ class SeleniumEngine(BrowserEngine):
         """Context manager exit - ensure browser is closed."""
         self.close()
 
+    def _ensure_hud_injected(self) -> None:
+        """Ensure the HUD overlay script is injected into the current page."""
+        if not self.driver:
+            logger.warning("HUD Mode: No driver available")
+            return
+            
+        if not self._hud_script:
+            logger.warning("HUD Mode: Script not loaded from file")
+            return
+        
+        # Check if already injected
+        try:
+            exists = self.driver.execute_script("return !!window.__WEBLENS_HUD__;")
+            if not exists:
+                logger.info("HUD Mode: Injecting script...")
+                self.driver.execute_script(self._hud_script)
+                logger.info("HUD Mode: Script injected successfully")
+            else:
+                logger.debug("HUD Mode: Script already injected")
+        except Exception as e:
+            logger.error(f"HUD Mode: Injection failed: {e}")
+
+    def get_element_rect(self, handle: WebElement) -> Dict[str, float]:
+        """Get precise sub-pixel coordinates and dimensions of an element."""
+        if not isinstance(handle, WebElement):
+             return {"x": 0, "y": 0, "width": 0, "height": 0}
+        
+        try:
+            return self.driver.execute_script("""
+                const rect = arguments[0].getBoundingClientRect();
+                return {
+                    x: rect.left + window.scrollX,
+                    y: rect.top + window.scrollY,
+                    width: rect.width,
+                    height: rect.height
+                };
+            """, handle)
+        except Exception as e:
+            logger.error(f"HUD Mode: Failed to get element rect: {e}")
+            return {"x": 0, "y": 0, "width": 0, "height": 0}
+
+    def show_hud_intent(self, data: Dict[str, Any]) -> None:
+        """Call the HUD overlay to visualize agent intent."""
+        self._ensure_hud_injected()
+        try:
+            self.driver.execute_script("if (window.__WEBLENS_HUD__) window.__WEBLENS_HUD__.showIntent(arguments[0]);", data)
+        except Exception as e:
+            logger.error(f"HUD Mode: Failed to show intent: {e}")
+
+    def hide_hud_intent(self) -> None:
+        """Hide the HUD intent reticle."""
+        self._ensure_hud_injected()
+        try:
+            self.driver.execute_script("if (window.__WEBLENS_HUD__) window.__WEBLENS_HUD__.hideIntent();")
+        except:
+            pass
+
+    def log_hud(self, message: str) -> None:
+        """Log a message to the HUD ticker tape."""
+        self._ensure_hud_injected()
+        try:
+            self.driver.execute_script("if (window.__WEBLENS_HUD__) window.__WEBLENS_HUD__.log(arguments[0]);", message)
+        except:
+            pass
+
+    def update_hud_inventory(self, data: Dict[str, Any]) -> None:
+        """Update the HUD variable inspector."""
+        self._ensure_hud_injected()
+        try:
+            self.driver.execute_script("if (window.__WEBLENS_HUD__) window.__WEBLENS_HUD__.updateInventory(arguments[0]);", data)
+        except:
+            pass

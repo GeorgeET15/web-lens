@@ -120,13 +120,16 @@ class BlockInterpreter:
     def _interpolate(self, text: Optional[str]) -> str:
         """
         Replace {{variable_name}} placeholders with actual values from context.
-        
-        STRICT MODE (Evidence-Compatible): Raises error if variable is missing.
-        This ensures flows fail honestly rather than typing literal {{tags}}.
         """
         if not text or not self.context:
             return text or ""
         
+        # Sync HUD inventory on first interpolate if needed (or we can do it in execute_flow)
+        try:
+            self.engine.update_hud_inventory(self.context.saved_values)
+        except:
+            pass
+
         import re
         # Find all placeholders like {{var}}
         placeholders = re.findall(r'\{\{(.*?)\}\}', text)
@@ -213,6 +216,8 @@ class BlockInterpreter:
             handle = self.resolver.resolve(self.engine, target_ref)
             if handle:
                 self.context.emit_taf("trace", "Fast-Path: Element found instantly. Skipping stability guard.")
+                # TRIGGER HUD FOR FAST-PATH
+                self._trigger_hud_intent(handle, target_ref, 1.0, strategy_desc, name_source)
                 return handle
         except Exception:
             pass
@@ -230,6 +235,16 @@ class BlockInterpreter:
                 # Use engine-agnostic resolver logic
                 handle = self.resolver.resolve(self.engine, target_ref)
                 if handle:
+                    # Heuristic confidence score
+                    score = 1.0
+                    if confidence == 'medium': score = 0.85
+                    elif confidence == 'low': score = 0.65
+                    # Decrease score slightly per attempt
+                    score = max(0.4, score - (attempt * 0.1))
+
+                    # TRIGGER HUD FOR RETRY-PATH
+                    self._trigger_hud_intent(handle, target_ref, score, strategy_desc, name_source)
+
                     # Confidence-based TAF feedback
                     if strategy_desc != "balanced":
                         self.context.emit_taf("analysis", f"Element found using {strategy_desc} resolution strategy.")
@@ -263,6 +278,28 @@ class BlockInterpreter:
              intent=f"Resolving '{target_ref.name}' with {strategy_desc} strategy",
              strategy_log=self.context.current_taf['analysis']
         )
+
+    def _trigger_hud_intent(self, handle: Any, target_ref: ElementRef, score: float, strategy: str, source: str) -> None:
+        """Centralized helper to calculate and trigger HUD intent visuals."""
+        try:
+            rect = self.engine.get_element_rect(handle)
+            intent_data = {
+                "x": rect["x"],
+                "y": rect["y"],
+                "width": rect["width"],
+                "height": rect["height"],
+                "intent": f"RESOLVED: {target_ref.name or 'element'}",
+                "confidence": score,
+                "reasoning": f"Located '{target_ref.name}' via {source} heuristics ({strategy})."
+            }
+            # TRIGGER BROWSER HUD
+            self.engine.show_hud_intent(intent_data)
+            
+            # STREAM AGENT INTENT TO FRONTEND
+            if self.on_event:
+                self.on_event("agent_intent", "system", intent_data)
+        except Exception as e:
+            logger.warning(f"HUD Mode: Failed to trigger intent visuals: {e}")
 
     def _check_capabilities(self, handle: Any, element_name: str, intent: str, required_capability: str) -> None:
         """
@@ -623,11 +660,17 @@ class BlockInterpreter:
         status = "started"
 
         if self.on_event:
+            msg = self._get_block_message(block)
             self.on_event("block_execution", block_id, {
                 "type": "block_execution", 
                 "status": "running", 
-                "message": self._get_block_message(block)
+                "message": msg
             })
+            # Log to Browser HUD
+            try:
+                self.engine.log_hud(msg)
+            except:
+                pass
 
         # Reset TAF for new block
         self.context.flush_taf()
@@ -753,6 +796,12 @@ class BlockInterpreter:
                     "evidence": evidence,  # Add evidence to real-time event
                     "duration_ms": duration_ms
                 })
+            
+            # CLEAR BROWSER HUD
+            try:
+                self.engine.hide_hud_intent()
+            except:
+                pass
 
         # Continue to next block
         next_id = block.next_block
@@ -1114,6 +1163,12 @@ class BlockInterpreter:
              text = self.engine.get_element_text(handle)
              self.context.saved_values[block.save_as.key] = text
              
+             # Sync HUD Inventory
+             try:
+                 self.engine.update_hud_inventory(self.context.saved_values)
+             except:
+                 pass
+
              # Also expose as evidence for the report/explorer
              self.context.current_evidence = { "text": text, "label": block.save_as.label, "key": block.save_as.key }
              
