@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { BlockExecution } from '../../types/execution';
-import { ChevronDown, ChevronRight, Camera, Info, ShieldCheck, Activity, Brain, Loader2, Target, Database, Copy, Check } from 'lucide-react';
+import { ChevronDown, ChevronRight, Camera, Info, ShieldCheck, Activity, Brain, Loader2, Target, Database, Copy, Check, Sparkles, HeartPulse } from 'lucide-react';
 import { AIInsight } from '../ai/AIInsight';
 import { AIDisclaimer } from '../ai/AIDisclaimer';
+import { cn } from '../../lib/utils';
+import { API_ENDPOINTS } from '../../config/api';
 
 interface Props {
   block?: BlockExecution;
+  flowId?: string;
   error?: {
     type: string;
     message: string;
@@ -13,7 +16,7 @@ interface Props {
   };
 }
 
-const InsightPanelDetail: React.FC<Props> = ({ block, error }) => {
+const InsightPanelDetail: React.FC<Props> = ({ block, flowId, error }) => {
   const [showReasoning, setShowReasoning] = useState(false);
   const [showTrace, setShowTrace] = useState(false);
   const [aiSummary, setAiSummary] = useState<string>("");
@@ -114,6 +117,84 @@ const InsightPanelDetail: React.FC<Props> = ({ block, error }) => {
               )
             )}
         </div>
+        
+        {/* SEMANTIC HEALTH INDICATOR */}
+        {block.confidence_score !== undefined && block.confidence_score !== null && (
+          <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <HeartPulse className={cn("w-3 h-3", 
+                  block.confidence_score >= 0.8 ? "text-emerald-500" : 
+                  block.confidence_score >= 0.6 ? "text-amber-500" : "text-rose-500"
+                )} />
+                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Semantic Health</span>
+              </div>
+              <div className="group relative flex items-center gap-1.5">
+                <span className={cn("text-[9px] font-black uppercase tracking-widest transition-colors",
+                  block.confidence_score >= 0.8 ? "text-emerald-500/80" : 
+                  block.confidence_score >= 0.6 ? "text-amber-500/80" : "text-rose-500/80"
+                )}>
+                  {block.confidence_score >= 0.8 ? "Healthy" : 
+                   block.confidence_score >= 0.6 ? "Drifting" : "At Risk"}
+                </span>
+                <span className="text-[8px] font-mono text-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {(block.confidence_score * 100).toFixed(0)}%
+                </span>
+              </div>
+            </div>
+            <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+               <div 
+                 className={cn("h-full transition-all duration-500",
+                   block.confidence_score >= 0.8 ? "bg-emerald-500" : 
+                   block.confidence_score >= 0.6 ? "bg-amber-500" : "bg-rose-500"
+                 )}
+                 style={{ width: `${block.confidence_score * 100}%` }}
+               />
+            </div>
+            {block.confidence_score < 0.7 && block.status === 'success' && (
+              <div className="flex flex-col gap-2 pt-1">
+                <p className="text-[10px] text-amber-500/80 italic leading-relaxed">
+                  Confidence dip detected. This step is still working, but the UI has drifted from the original reference.
+                </p>
+                <button 
+                  onClick={async () => {
+                    try {
+                      if (!flowId) {
+                        if ((window as any).addToast) (window as any).addToast('error', 'Flow context missing. Cannot heal.');
+                        return;
+                      }
+
+                      if ((window as any).addToast) (window as any).addToast('info', 'Executing Self-Healing sequence...');
+                      
+                      const response = await fetch(`${API_ENDPOINTS.BASE_URL}/api/flows/${flowId}/heal-step`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          run_id: block.run_id,
+                          block_id: block.block_id
+                        })
+                      });
+
+                      if (response.ok) {
+                        if ((window as any).addToast) (window as any).addToast('success', 'Step Healed! Semantic metadata updated.');
+                      } else {
+                        const err = await response.json();
+                        if ((window as any).addToast) (window as any).addToast('error', `Healing failed: ${err.detail || 'Unknown error'}`);
+                      }
+                    } catch (e) {
+                      console.error("Healing failed", e);
+                      if ((window as any).addToast) (window as any).addToast('error', 'Healing failed. Check console.');
+                    }
+                  }}
+                  className="flex items-center justify-center gap-2 w-full py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded text-[9px] font-black uppercase tracking-widest text-amber-400 transition-all active:scale-95"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  Heal this Step
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-hide pb-20">

@@ -205,10 +205,12 @@ class StructuralResolver:
             # Success - extract element
             if isinstance(result, dict) and 'element' in result:
                 # Log success with score
-                score = result.get('score', 0)
+                raw_score = result.get('score', 0)
+                # Normalize: threshold is 25, let's say 40+ is 1.0
+                norm_score = min(1.0, raw_score / 40.0) if raw_score > 0 else 0
                 candidate_count = result.get('candidateCount', 0)
-                print(f"[Structural Resolution] Resolved '{ref.system_role}' with score {score} ({candidate_count} candidates)")
-                return result['element']
+                print(f"[Structural Resolution] Resolved '{ref.system_role}' with score {norm_score} ({candidate_count} candidates)")
+                return result['element'], norm_score, None
             
         except BrowserEngineError:
             raise

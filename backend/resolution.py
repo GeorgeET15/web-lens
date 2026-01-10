@@ -165,7 +165,20 @@ function findSemantic(ref) {
         return 0;
     });
     
-    return candidates.length > 0 ? candidates[0].el : null;
+    const best = candidates[0];
+    return { 
+        element: best.el, 
+        score: best.score,
+        actuals: {
+            role: getRole(best.el),
+            name: getName(best.el),
+            testId: best.el.getAttribute('data-testid') || best.el.getAttribute('data-test-id') || best.el.getAttribute('data-cy') || best.el.getAttribute('data-qa'),
+            ariaLabel: best.el.getAttribute('aria-label'),
+            placeholder: best.el.getAttribute('placeholder'),
+            title: best.el.title || best.el.getAttribute('title'),
+            tagName: best.el.tagName.toLowerCase()
+        }
+    };
 }
 return findSemantic(arguments[0]);
 """
@@ -253,9 +266,10 @@ class ElementResolver:
     Using Multi-Attribute Weighted Scoring (MAWS).
     """
     
-    def resolve(self, engine: BrowserEngine, ref: ElementRef) -> Any:
+    def resolve(self, engine: BrowserEngine, ref: ElementRef) -> tuple[Any, float, Optional[Dict[str, Any]]]:
         """
         Resolve an element using structural (void), region-scoped (user-declared), or MAWS (native) strategy.
+        Returns a tuple of (element_handle, confidence_score, actual_attributes).
         """
         # Check if this is a structural intent element (semantic void)
         is_structural = hasattr(ref, 'intent_type') and ref.intent_type == 'structural'
@@ -300,7 +314,8 @@ class ElementResolver:
                 
                 # Success - extract element
                 if isinstance(result, dict) and 'element' in result:
-                    return result['element']
+                    # User-declared regional matches are considered high confidence if found
+                    return result['element'], 1.0, None
                     
             except BrowserEngineError:
                 raise
@@ -323,9 +338,12 @@ class ElementResolver:
         }
 
         try:
-            found = engine.execute_script(JS_FIND_SEMANTIC, ref_data)
-            if found:
-                return found
+            result = engine.execute_script(JS_FIND_SEMANTIC, ref_data)
+            if result and isinstance(result, dict) and 'element' in result:
+                # Normalize score: Assume 20+ is "Healthy High" (1.0), Scale 5-20
+                raw_score = result.get('score', 0)
+                norm_score = min(1.0, raw_score / 20.0) if raw_score > 0 else 0
+                return result['element'], norm_score, result.get('actuals')
         except Exception as e:
             # Check if it's a browser error or just not found
             if isinstance(e, BrowserEngineError):

@@ -170,7 +170,11 @@ export const ExecutionExplorer: React.FC<Props> = ({
                         </div>
                     </div>
                     <div className="flex-1">
-                        <InsightPanel block={selectedBlock} error={activeReport.error} />
+                        <InsightPanel 
+                            block={selectedBlock} 
+                            flowId={activeReport.flow_id}
+                            error={activeReport.error} 
+                        />
                     </div>
                 </div>
             </div>

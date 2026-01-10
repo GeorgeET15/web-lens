@@ -869,6 +869,8 @@ class BlockExecution(BaseModel):
     taf: Dict[str, List[str]]
     screenshot: Optional[str] = None
     message: Optional[str] = None
+    confidence_score: Optional[float] = None
+    actual_attributes: Optional[Dict[str, Any]] = None
     tier_2_evidence: Optional[Any] = None
 
 class ExecutionReport(BaseModel):

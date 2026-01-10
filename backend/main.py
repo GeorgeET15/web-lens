@@ -267,6 +267,11 @@ class InspectorStartRequest(BaseModel):
     url: str
 
 
+class HealStepRequest(BaseModel):
+    run_id: str
+    block_id: str
+
+
 @app.post("/api/assets/upload")
 async def upload_asset(file: UploadFile = File(...)):
     """Upload a file to test_assets/uploads."""
@@ -292,7 +297,73 @@ async def upload_asset(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
-@app.post("/api/inspector/start")
+@app.post("/api/flows/{flow_id}/heal-step")
+async def heal_flow_step(
+    flow_id: str,
+    request: HealStepRequest,
+    user_id: Optional[str] = Depends(get_current_user)
+):
+    """
+    Apply 'actual' semantic attributes from a run back to the flow definition.
+    This effectively 'heals' the flow when UI drift is detected.
+    """
+    if not db.is_enabled():
+        raise HTTPException(status_code=503, detail="Persistence disabled")
+
+    # 1. Fetch Execution Record
+    exec_resp = db.client.table("executions").select("report").eq("id", request.run_id).execute()
+    if not exec_resp.data:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    
+    report = exec_resp.data[0]['report']
+    blocks = report.get('blocks', [])
+    target_exec = next((b for b in blocks if b['block_id'] == request.block_id), None)
+    
+    if not target_exec or not target_exec.get('actual_attributes'):
+        raise HTTPException(status_code=400, detail="No healing data available for this step")
+    
+    actuals = target_exec['actual_attributes']
+    
+    # 2. Fetch Flow
+    flow_resp = db.client.table("flows").select("graph").eq("id", flow_id).execute()
+    if not flow_resp.data:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    
+    graph = flow_resp.data[0]['graph']
+    
+    # 3. Find and Update Block
+    blocks = graph.get('blocks', [])
+    block_to_heal = next((b for b in blocks if b['id'] == request.block_id), None)
+    
+    if not block_to_heal:
+        raise HTTPException(status_code=404, detail="Block not found in flow")
+    
+    # Update ElementRef metadata
+    if 'params' in block_to_heal and 'element' in block_to_heal['params']:
+        element = block_to_heal['params']['element']
+        # Update name and role from actuals
+        element['name'] = actuals.get('name', element['name'])
+        element['role'] = actuals.get('role', element['role'])
+        
+        # Merge metadata (testId, etc)
+        if 'metadata' not in element:
+            element['metadata'] = {}
+            
+        if actuals.get('testId'):
+            element['metadata']['testId'] = actuals['testId']
+        
+        # Mark as 'healed' in metadata for audit trail
+        element['metadata']['last_healed_at'] = time.time()
+        element['metadata']['previous_confidence'] = target_exec.get('confidence_score')
+        
+    # 4. Save Flow
+    db.save_flow(user_id or "anonymous", graph)
+    
+    return {
+        "success": True, 
+        "message": f"Step {request.block_id} healed successfully.",
+        "updated_attributes": actuals
+    }
 async def start_inspector(request: InspectorStartRequest):
     """Start the Live Inspector browser session."""
     global active_inspector

@@ -15,6 +15,7 @@ export interface BlockExecution {
   };
   screenshot?: string;
   message?: string;
+  confidence_score?: number;
   tier_2_evidence?: any;
 }
 
@@ -28,6 +29,7 @@ export interface ExecutionSummary {
 
 export interface ExecutionReport {
   run_id: string;
+  flow_id?: string;
   started_at: number;
   finished_at?: number;
   success: boolean;

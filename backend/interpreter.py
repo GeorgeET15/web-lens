@@ -55,6 +55,8 @@ class InterpreterContext:
         # TAF Buffers for the current block
         self.current_taf = {"trace": [], "analysis": [], "feedback": []}
         self.current_evidence: Optional[Any] = None
+        self.current_block_score: Optional[float] = None
+        self.current_block_actuals: Optional[Dict[str, Any]] = None
         
         # Execution Insight Report
         self.report = ExecutionReport(
@@ -214,11 +216,17 @@ class BlockInterpreter:
         # Attempt to find the element immediately without triggering expensive stability guards.
         # This drastically improves speed for static pages and fast UI.
         try:
-            handle = self.resolver.resolve(self.engine, target_ref)
+            handle, score, actuals = self.resolver.resolve(self.engine, target_ref)
             if handle:
-                self.context.emit_taf("trace", "Fast-Path: Element found instantly. Skipping stability guard.")
+                self.context.emit_taf("trace", f"Fast-Path: Element found instantly. Semantic confidence: {score:.2f}")
                 # TRIGGER HUD FOR FAST-PATH
-                self._trigger_hud_intent(handle, target_ref, 1.0, strategy_desc, name_source)
+                self._trigger_hud_intent(handle, target_ref, score, strategy_desc, name_source)
+                
+                # Store score and actuals in context for the current block
+                if hasattr(self, 'context'):
+                    self.context.current_block_score = score
+                    self.context.current_block_actuals = actuals
+                
                 return handle
         except Exception:
             pass
@@ -234,17 +242,21 @@ class BlockInterpreter:
         for attempt in range(max_retries):
             try:
                 # Use engine-agnostic resolver logic
-                handle = self.resolver.resolve(self.engine, target_ref)
+                handle, score, actuals = self.resolver.resolve(self.engine, target_ref)
                 if handle:
-                    # Heuristic confidence score
-                    score = 1.0
-                    if confidence == 'medium': score = 0.85
-                    elif confidence == 'low': score = 0.65
-                    # Decrease score slightly per attempt
-                    score = max(0.4, score - (attempt * 0.1))
+                    # Decrease score slightly per attempt if it's not already low
+                    final_score = max(0.2, score - (attempt * 0.05))
+                    
+                    if final_score < 0.7:
+                        self.context.emit_taf("trace", f"[Semantic Health] Confidence dip: {final_score:.2f}. Potential contextual drift detected.")
+                    
+                    # Store score and actuals in context
+                    if hasattr(self, 'context'):
+                        self.context.current_block_score = final_score
+                        self.context.current_block_actuals = actuals
 
                     # TRIGGER HUD FOR RETRY-PATH
-                    self._trigger_hud_intent(handle, target_ref, score, strategy_desc, name_source)
+                    self._trigger_hud_intent(handle, target_ref, final_score, strategy_desc, name_source)
 
                     # Confidence-based TAF feedback
                     if strategy_desc != "balanced":
@@ -674,8 +686,10 @@ class BlockInterpreter:
             except:
                 pass
 
-        # Reset TAF for new block
+        # Reset TAF and score for new block
         self.context.flush_taf()
+        self.context.current_block_score = None
+        self.context.current_block_actuals = None
         
         try:
             if isinstance(block, OpenPageBlock):
@@ -783,6 +797,8 @@ class BlockInterpreter:
                 duration_ms=duration_ms,
                 taf=taf_bundle,
                 screenshot=screenshot,
+                confidence_score=self.context.current_block_score,
+                actual_attributes=self.context.current_block_actuals,
                 tier_2_evidence=evidence
             )
             self.context.add_block_execution(execution_record)
