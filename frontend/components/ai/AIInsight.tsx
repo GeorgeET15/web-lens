@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 export interface AIInsightProps {
-  type: 'failure' | 'inspection' | 'draft' | 'stability';
+  type: 'failure' | 'inspection' | 'stability';
   content: string;
   roleLabel?: string;
   isOpen?: boolean;
@@ -34,7 +34,6 @@ export const AIInsight: React.FC<AIInsightProps> = ({
       "rounded-lg border border-dashed transition-all duration-300 overflow-hidden",
       type === 'failure' && "bg-purple-50/50 border-purple-200/40 dark:bg-zinc-900/50 dark:border-purple-800/30",
       type === 'inspection' && "bg-blue-50/50 border-blue-200/40 dark:bg-zinc-900/50 dark:border-indigo-500/10",
-      type === 'draft' && "bg-indigo-500/5 border-indigo-500/20 dark:bg-zinc-900/50 dark:border-indigo-500/10",
       type === 'stability' && "bg-emerald-500/5 border-emerald-500/20 dark:bg-zinc-900/50 dark:border-emerald-500/10",
       className
     )}>
@@ -51,7 +50,6 @@ export const AIInsight: React.FC<AIInsightProps> = ({
             "p-1.5 rounded-md",
             type === 'failure' && "bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-300",
             type === 'inspection' && "bg-indigo-500/10 text-indigo-400",
-            type === 'draft' && "bg-indigo-500/20 text-indigo-300",
             type === 'stability' && "bg-emerald-500/20 text-emerald-400"
           )}>
             <Sparkles size={16} />

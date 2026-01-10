@@ -7,8 +7,16 @@ Uses ElementResolver for robust, zero-code element finding.
 """
 
 from typing import Dict, Any, List, Optional
+from pydantic import TypeAdapter
 import time
 import re
+import io
+import base64
+import asyncio
+import httpx
+import json
+from pathlib import Path
+from PIL import Image, ImageChops, ImageStat
 from models import (
     FlowGraph, Block, ExecutionResult,
     OpenPageBlock, ClickElementBlock, EnterTextBlock,
@@ -23,11 +31,13 @@ from models import (
     SubmitFormBlock, ConfirmDialogBlock, DismissDialogBlock,
     ActivatePrimaryActionBlock, SubmitCurrentInputBlock,
     VerifyPageContentBlock, SavePageContentBlock,
-    GetCookiesBlock, GetLocalStorageBlock, GetSessionStorageBlock,
-    ObserveNetworkBlock, SwitchTabBlock, AIPromptBlock,
+    GetCookiesBlock,    GetLocalStorageBlock, GetSessionStorageBlock,
+    ObserveNetworkBlock, SwitchTabBlock,
+    VisualVerifyBlock,
     HttpMethod, PerformanceMetric,
     ConditionKind, Condition, ElementRef,
-    BlockExecution, ExecutionReport, UserFacingError, ErrorCategory
+    BlockExecution, ExecutionReport, UserFacingError, ErrorCategory,
+    Task, TaskStatus
 )
 from failures import (
     WebLensFailure, ElementMissingError, ElementHiddenError, InteractionRejectedError,
@@ -38,6 +48,7 @@ from failures import (
 from browser_engine import BrowserEngine, BrowserEngineError
 from resolution import ElementResolver, FileResolver
 from taf import TAFRegistry
+from ai.ai_service import ai_service
 
 
 class InterpreterContext:
@@ -72,6 +83,8 @@ class InterpreterContext:
         """Add a log entry (Legacy, maps to Trace)."""
         self.logs.append(message)
         self.emit_taf("trace", message)
+        # Ensure log message is visible in terminal for developer/user tracking
+        print(f"  {message}", flush=True)
 
     def emit_taf(self, channel: str, message: str) -> None:
         """Centralized TAF emitter."""
@@ -121,6 +134,59 @@ class BlockInterpreter:
         self.resolver = ElementResolver()
 
     def _interpolate(self, text: Optional[str]) -> str:
+        """
+        Replace {{variable_name}} placeholders with actual values from context.
+        """
+        if not text or not self.context:
+            return text or ""
+        
+        # Sync HUD inventory on first interpolate if needed (or we can do it in execute_flow)
+        try:
+            self.engine.update_hud_inventory(self.context.saved_values)
+        except:
+            pass
+
+        import re
+        # Find all placeholders like {{var}}
+        placeholders = re.findall(r'\{\{(.*?)\}\}', text)
+        result = text
+        for p in placeholders:
+            key = p.strip()
+            if key in self.context.saved_values:
+                result = result.replace(f'{{{{{p}}}}}', str(self.context.saved_values[key]))
+            else:
+                # STRICT MODE: Fail loudly on missing variables
+                raise VariableMissingError(
+                    key=key,
+                    available_keys=list(self.context.saved_values.keys())
+                )
+        return result
+
+    def _get_pixel_diff(self, img1_b64: str, img2_b64: str) -> float:
+        """
+        Calculate pixel-by-pixel difference between two images.
+        Returns a normalized score (0.0 to 1.0) where 0.0 is identical.
+        """
+        try:
+            # Decode images
+            if "," in img1_b64: img1_b64 = img1_b64.split(",")[1]
+            if "," in img2_b64: img2_b64 = img2_b64.split(",")[1]
+            
+            img1 = Image.open(io.BytesIO(base64.b64decode(img1_b64))).convert('RGB')
+            img2 = Image.open(io.BytesIO(base64.b64decode(img2_b64))).convert('RGB')
+            
+            if img1.size != img2.size:
+                # Resize to common size if needed, but for regression we usually expect same size
+                # For now, let's just return 1.0 to trigger AI saliency check
+                return 1.0
+                
+            diff = ImageChops.difference(img1, img2)
+            stat = ImageStat.Stat(diff)
+            # Normalizing mean of differences across R, G, B channels
+            return sum(stat.mean) / (3 * 255.0)
+        except Exception as e:
+            print(f"Pixel diff calculation failed: {e}")
+            return 1.0 # Fail safe to AI check
         """
         Replace {{variable_name}} placeholders with actual values from context.
         """
@@ -650,8 +716,8 @@ class BlockInterpreter:
                 return f"Extracting text from {block.element.name or 'element'}"
             elif isinstance(block, ActivatePrimaryActionBlock):
                 return "Activating primary action (Search/Submit/Login)"
-            elif isinstance(block, AIPromptBlock):
-                return f"AI Agent: {self._interpolate(block.prompt)}"
+            elif isinstance(block, VisualVerifyBlock):
+                return "Performing Semantic Visual Verification"
             return f"Executing {block.type}..."
         except Exception:
             return f"Executing {block.type}..."
@@ -762,8 +828,8 @@ class BlockInterpreter:
                 self._execute_observe_network(block)
             elif isinstance(block, SwitchTabBlock):
                 self._execute_switch_tab(block)
-            elif isinstance(block, AIPromptBlock):
-                self._execute_ai_prompt(block)
+            elif isinstance(block, VisualVerifyBlock):
+                self._execute_visual_verify(block)
             else:
                 raise ValueError(f"Unknown block type: {type(block)}")
             
@@ -1089,8 +1155,13 @@ class BlockInterpreter:
         self.context.log(" Page refreshed")
 
     def _execute_wait_for_page_load(self, block: WaitForPageLoadBlock) -> None:
-        self.engine.wait_for_page_load(block.timeout_seconds)
-        self.context.log(" Page loaded")
+        timeout = getattr(block, "timeout_seconds", 15) or 15
+        self.context.log(f" Waiting for page load (Timeout: {timeout}s)...")
+        try:
+            self.engine.wait_for_page_load(timeout)
+            self.context.log(" Page loaded")
+        except Exception as e:
+            self.context.log(f" Warning: Page load wait timed out or failed: {e}")
 
     def _execute_select_option(self, block: SelectOptionBlock) -> None:
         # Interpreter assumes completeness - validation happened at gate
@@ -1457,72 +1528,6 @@ class BlockInterpreter:
         self.context.emit_taf("trace", f"Switching to {'newest tab' if block.to_newest else f'tab #{block.tab_index}'}")
         self.engine.switch_to_tab(block.to_newest, block.tab_index)
 
-    def _execute_ai_prompt(self, block: AIPromptBlock) -> None:
-        """Executes a natural language prompt by calling the AgenticExecutor."""
-        prompt = self._interpolate(block.prompt)
-        self.context.log(f"[EXPERIMENTAL] AI Agent starting mission: '{prompt}'")
-        
-        from ai.ai_service import AIService
-        ai_service = AIService() # Isolated instance for this background thread's execution loop
-        from ai.agentic_executor import AgenticExecutor
-        import asyncio
-        
-        executor = AgenticExecutor(ai_service)
-        
-        # Run async planning in the synchronous interpreter thread
-        try:
-            # Reusing current engine ensures session continuity
-            result = asyncio.run(executor.plan_intent(prompt, existing_engine=self.engine))
-        except Exception as e:
-            raise WebLensFailure(
-                intent=f"[EXPERIMENTAL] AI Prompt Execution: {prompt}",
-                reason=f"Failed to initiate AI planning: {str(e)}",
-                guidance="Check your AI service configuration or connectivity."
-            )
-            
-        if not result.get("success"):
-            raise WebLensFailure(
-                intent=f"[EXPERIMENTAL] AI Prompt Execution: {prompt}",
-                reason=result.get("explanation", "AI failed to generate a plan."),
-                guidance="Try refining your prompt or ensuring the page state is clear."
-            )
-            
-        planned_blocks_data = result.get("planned_blocks", [])
-        if not planned_blocks_data:
-            self.context.log("[EXPERIMENTAL] AI completed mission: No additional steps required.")
-            return
-
-        self.context.log(f"[EXPERIMENTAL] AI Plan generated ({len(planned_blocks_data)} steps). Executing segment...")
-        
-        from pydantic import TypeAdapter
-        from models import Block, FlowGraph
-        from typing import List
-        
-        # Convert raw planned blocks into Pydantic models
-        try:
-            adapter = TypeAdapter(List[Block])
-            blocks_list = adapter.validate_python(planned_blocks_data)
-        except Exception as e:
-            logger.error(f"AI Plan Pydantic validation failed: {e}")
-            logger.debug(f"Invalid Plan Data: {planned_blocks_data}")
-            raise WebLensFailure(
-                intent="AI Plan Integration",
-                reason=f"AI generated invalid block data: {str(e)}",
-                guidance="The agent attempted to use an unsupported block type or structure."
-            )
-            
-        # Create a temporary FlowGraph for the segment
-        temp_flow = FlowGraph(
-            name=f"AI Sub-flow: {prompt}",
-            entry_block=blocks_list[0].id,
-            blocks=blocks_list
-        )
-        
-        # Execute the AI-generated segment within the current context
-        # This will follow the next_block chain within the sub-flow
-        self._execute_block(temp_flow.entry_block, temp_flow)
-        
-        self.context.log("✅ AI Segment completed. Resuming core flow...")
 
     def _execute_get_session_storage(self, block: GetSessionStorageBlock) -> None:
         """Capture session storage."""
@@ -1659,11 +1664,12 @@ class BlockInterpreter:
         # Interpreter assumes completeness - validation happened at gate
         expected = self._interpolate(block.match.value)
         self.context.log(f" Verifying page content contains: '{expected}'")
+        found = False
         try:
             mode = block.match.mode.value if hasattr(block.match.mode, 'value') else block.match.mode
             self.engine.verify_page_content(expected, mode)
             found = True
-        except BrowserEngineError:
+        except Exception as e:
             found = False
             
         taf = TAFRegistry.page_content_check(expected, found)
@@ -1672,4 +1678,119 @@ class BlockInterpreter:
                 self.context.emit_taf(channel, msg)
         
         if not found:
-             raise BrowserEngineError(f"Page content verification failed: '{expected}' not found.")
+             print(f"DEBUG: verify_page_content Failed ('{expected}')")
+             raise VerificationMismatchError(
+                 intent="Verifying Page Content",
+                 expected=f"Content containing '{expected}'",
+                 actual="Text not found on page"
+             )
+        print(f"DEBUG: verify_page_content Success ('{expected}')")
+
+
+
+    def _update_task_status(self, task_id: str, status: TaskStatus) -> None:
+        """Update task status in report."""
+        if not self.context or not hasattr(self.context, "report"):
+            return
+        for task in self.context.report.tasks:
+            if task.id == task_id:
+                task.status = status
+                break
+
+    def _fetch_baseline(self, baseline_id: str) -> Optional[str]:
+        """Fetch baseline screenshot as base64."""
+        if baseline_id.startswith("http"):
+            try:
+                resp = httpx.get(baseline_id)
+                if resp.status_code == 200:
+                    return base64.b64encode(resp.content).decode('ascii')
+            except Exception as e:
+                self.context.log(f" Failed to fetch baseline URL: {e}")
+                return None
+        
+        # Try fetching from DB
+        from database import db
+        if db.is_enabled():
+            try:
+                # 1. Try if baseline_id is a specific Execution Record ID
+                resp = db.client.table("executions").select("report").eq("id", baseline_id).execute()
+                if resp.data:
+                    report = resp.data[0]['report']
+                    blocks = report.get('blocks', [])
+                    for b in reversed(blocks):
+                        if b.get('screenshot'):
+                            ss = b['screenshot']
+                            if ss.startswith("http"):
+                                return self._fetch_baseline(ss)
+                            return ss
+            except Exception as e:
+                self.context.log(f" DB Fetch failed for baseline {baseline_id}: {e}")
+        
+        return None
+
+    def _execute_visual_verify(self, block: VisualVerifyBlock) -> None:
+        """
+        [EXPERIMENTAL] Perform Semantic Visual Regression.
+        """
+        current_screenshot = self.engine.take_screenshot()
+        self.context.current_evidence = {"current": current_screenshot}
+        
+        if not block.baseline_id:
+            self.context.log(" No baseline provided. Capturing this as the potential baseline.")
+            self.context.emit_taf("feedback", "No baseline ID. Visual verification skipped (Baseline mode).")
+            return
+
+        baseline_b64 = self._fetch_baseline(self._interpolate(block.baseline_id))
+
+        if not baseline_b64:
+             self.context.log(f" Baseline {block.baseline_id} not found. Skipping comparison.")
+             return
+
+        # 1. Pixel Diff
+        px_diff = self._get_pixel_diff(baseline_b64, current_screenshot)
+        self.context.log(f" Pixel Difference: {px_diff*100:.2f}%")
+        
+        if px_diff <= block.threshold:
+            self.context.log(" Visual state stable (within threshold).")
+            self.context.emit_taf("analysis", f"Pixel-perfect match (diff={px_diff*100:.4f}% < {block.threshold*100}%)")
+            return
+
+        # 2. Semantic AI Fallback
+        self.context.log(" Pixel diff exceeds threshold. Invoking AI Saliency Advisor...")
+        
+        # Get Perception Data
+        try:
+            perception_path = Path(__file__).parent / "ai" / "perception.js"
+            perception_js = perception_path.read_text()
+            page_context = self.engine.execute_script(perception_js)
+        except Exception as e:
+            page_context = f"Error capturing context: {e}"
+
+        # AI Call
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            ai_response = loop.run_until_complete(ai_service.analyze_visual_diff(baseline_b64, current_screenshot, str(page_context)))
+        except Exception as e:
+            self.context.log(f" AI Saliency check failed: {e}")
+            ai_response = f"DECISION: FAIL\nEXPLANATION: AI analysis failed: {e}"
+        finally:
+            loop.close()
+        
+        # Parse AI Response
+        is_pass = "DECISION: PASS" in (ai_response or "")
+        explanation = "Unknown AI reasoning"
+        if ai_response and "EXPLANATION:" in ai_response:
+            explanation = ai_response.split("EXPLANATION:")[1].strip()
+            
+        self.context.log(f" AI Decision: {'PASS' if is_pass else 'FAIL'}")
+        self.context.log(f" AI Explanation: {explanation}")
+        
+        if not is_pass:
+            raise VerificationMismatchError(
+                expected="Visual Saliency Match",
+                actual=f"Visual Regression Detected: {explanation}",
+                intent="Semantic Visual Verification"
+            )
+        else:
+            self.context.emit_taf("analysis", f"AI Overrode pixel diff: {explanation}")

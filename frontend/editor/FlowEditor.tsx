@@ -22,7 +22,7 @@ import {
 
 import type { FlowGraph } from '../types/flow';
 import { BaseBlock, BaseBlockOverlay } from './blocks/BaseBlock';
-import { Plus, Minus, Save, FolderOpen, Trash2, X, LocateFixed, Sparkles, Globe, Laptop } from 'lucide-react';
+import { Plus, Minus, Save, FolderOpen, Trash2, X, LocateFixed, Globe, Laptop } from 'lucide-react';
 import { FlowStorage, SavedFlowMetadata } from '../lib/storage';
 import { OnboardingModal } from '../components/OnboardingModal';
 import { supabase } from '../lib/supabase';
@@ -33,7 +33,7 @@ import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { ScenarioPanel } from '../components/ScenarioPanel';
 import { EditorBlock, BlockType, SavedValue, ScenarioSuiteReport } from './entities';
 import { ScenarioSuiteDashboard } from '../components/execution/ScenarioSuiteDashboard';
-import { AICopilotPanel } from '../components/ai/AICopilotPanel';
+
 import { cn } from '../lib/utils';
 import { Skeleton } from '../components/Skeleton';
 import { DEFAULT_BLOCKS } from './constants';
@@ -225,7 +225,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
     const [schemaVersion, setSchemaVersion] = useState(1);
     
     // AI Roles State
-    const [showAiReview, setShowAiReview] = useState(false);
+
     const [isLoadModalOpen, setIsLoadModalOpen] = useState(false);
     const [savedFlows, setSavedFlows] = useState<SavedFlowMetadata[]>([]);
     const [isLoadingSavedFlows, setIsLoadingSavedFlows] = useState(false);
@@ -382,7 +382,7 @@ const [dialogConfig, setDialogConfig] = useState<{
         scrollToBlock: (id) => {
             const pos = effectivePositions[id];
             if (pos) {
-                const containerWidth = window.innerWidth - (isSidebarOpen ? sidebarWidth : 0) - (showAiReview ? 350 : 0);
+                const containerWidth = window.innerWidth - (isSidebarOpen ? sidebarWidth : 0);
                 const containerHeight = window.innerHeight - 56; 
                 
                 // Focus the block in the center of the available canvas area
@@ -400,49 +400,6 @@ const [dialogConfig, setDialogConfig] = useState<{
 
 
 
-    const handleApplyAIBlocks = (draftBlocks: any[]) => {
-        // Valid block types from entities.ts
-        const validBlockTypes = new Set([
-            'open_page', 'click_element', 'enter_text', 'wait_until_visible', 'assert_visible',
-            'if_condition', 'repeat_until', 'delay', 'refresh_page', 'wait_for_page_load',
-            'select_option', 'upload_file', 'verify_text', 'verify_page_content', 'scroll_to_element',
-            'save_text', 'save_page_content', 'verify_page_title', 'verify_url', 'verify_element_enabled',
-            'use_saved_value', 'verify_network_request', 'verify_performance', 'submit_form',
-            'confirm_dialog', 'dismiss_dialog', 'activate_primary_action', 'submit_current_input',
-            'get_cookies', 'get_local_storage', 'get_session_storage', 'observe_network'
-        ]);
-        
-        // Filter out invalid blocks
-        const validDraftBlocks = draftBlocks.filter((b: any) => {
-            if (!validBlockTypes.has(b.type)) {
-                console.warn(`Skipping invalid block type: ${b.type}`);
-                return false;
-            }
-            return true;
-        });
-        
-        if (validDraftBlocks.length === 0) {
-            console.error("No valid blocks to apply");
-            return;
-        }
-        
-        const timestamp = Date.now();
-        const newBlocks: EditorBlock[] = validDraftBlocks.map((b: any, i: number) => {
-            const blockId = `draft_${timestamp}_${i}`;
-            const parentBlockId = i > 0 ? `draft_${timestamp}_${i - 1}` : undefined;
-            
-            return {
-                id: blockId,
-                type: b.type,
-                label: b.label || `Block ${i + 1}`,
-                params: b.params || {},
-                parentId: parentBlockId,
-                position: i === 0 ? { x: 100, y: 100 } : undefined
-            };
-        });
-        
-        setBlocks(newBlocks);
-    };
 
 
 
@@ -1468,16 +1425,6 @@ const [dialogConfig, setDialogConfig] = useState<{
                 <LocateFixed className="w-4 h-4 group-hover:scale-110 transition-transform" />
              </button>
 
-              <button 
-                 onClick={() => setShowAiReview(!showAiReview)}
-                 className={cn(
-                    "flex items-center justify-center p-3 bg-zinc-950 border rounded-xl transition-all shadow-[0_10px_40px_rgba(0,0,0,0.5)] active:scale-95 group",
-                    showAiReview ? "border-indigo-500 text-white bg-indigo-500/10" : "border-indigo-500/20 text-indigo-400 hover:text-white hover:bg-indigo-900/40"
-                 )}
-                  title="[EXPERIMENTAL] AI Assistant"
-              >
-                 <Sparkles className={cn("w-4 h-4 group-hover:scale-110 transition-transform", showAiReview && "animate-pulse")} />
-              </button>
              
              <div className="bg-zinc-950 border border-white/10 rounded-xl p-1.5 flex flex-col items-center gap-1.5 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
                 <button 
@@ -1637,19 +1584,6 @@ const [dialogConfig, setDialogConfig] = useState<{
             )}
         </div>
 
-        {/* AI Side Panel */}
-        <div 
-            className={cn(
-                "bg-black/90 border-l border-white/5 flex flex-col h-full transition-all duration-500 ease-in-out overflow-hidden z-40 relative",
-                showAiReview ? "w-[400px]" : "w-0 border-l-0"
-            )}
-        >
-            <AICopilotPanel 
-                onApplyBlocks={handleApplyAIBlocks}
-                onRunComplete={onViewScenario}
-                onClose={() => setShowAiReview(false)}
-            />
-        </div>
 
         {/* Action Loading Overlay */}
         {isProcessing && (

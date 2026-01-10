@@ -1,6 +1,6 @@
 import os
 import asyncio
-from typing import Optional
+from typing import Optional, List
 from langchain_google_genai import ChatGoogleGenerativeAI
 from .interface import LLMProvider
 
@@ -21,6 +21,9 @@ class GeminiProvider(LLMProvider):
             )
 
     async def generate_text(self, prompt: str) -> Optional[str]:
+        return await self.generate_multimodal(prompt, [])
+
+    async def generate_multimodal(self, prompt: str, images_base64: List[str]) -> Optional[str]:
         current_loop = asyncio.get_running_loop()
         
         # If the loop has changed or LLM is not initialized, (re)initialize
@@ -29,14 +32,24 @@ class GeminiProvider(LLMProvider):
             self._bound_loop = current_loop
 
         try:
-            print(f"Gemini generating text for prompt (len={len(prompt)})...", flush=True)
-            response = await self._llm.ainvoke(prompt)
-            print(f"Gemini response received (len={len(response.content)})", flush=True)
-            if len(response.content) < 100:
-                print(f"DEBUG: Short AI response: {response.content}", flush=True)
+            from langchain_core.messages import HumanMessage
+            
+            content = [{"type": "text", "text": prompt}]
+            for b64 in images_base64:
+                # Ensure base64 doesn't have the data:image/png;base64, prefix
+                if "," in b64:
+                    b64 = b64.split(",")[1]
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{b64}"}
+                })
+            
+            message = HumanMessage(content=content)
+            print(f"Gemini generating multimodal response (images={len(images_base64)})...", flush=True)
+            response = await self._llm.ainvoke([message])
             return response.content
         except Exception as e:
-            print(f"Gemini generation error: {e}")
+            print(f"Gemini multimodal generation error: {e}")
             return None
 
     def _init_llm(self):

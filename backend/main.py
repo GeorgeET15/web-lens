@@ -74,10 +74,6 @@ app = FastAPI(
 from ai.router import router as ai_router
 app.include_router(ai_router)
 
-# AI Capabilities
-from ai.router import router as ai_router
-app.include_router(ai_router)
-
 # AI Startup Diagnostic
 from ai.ai_service import ai_service
 logger.info(f"AI Capability Status: {'ENABLED' if ai_service.is_enabled() else 'DISABLED (Check .env for API keys)'}")
@@ -272,6 +268,11 @@ class HealStepRequest(BaseModel):
     block_id: str
 
 
+class DraftRequest(BaseModel):
+    intent: str
+    flow_id: Optional[str] = None
+
+
 @app.post("/api/assets/upload")
 async def upload_asset(file: UploadFile = File(...)):
     """Upload a file to test_assets/uploads."""
@@ -352,10 +353,10 @@ async def heal_flow_step(
         if actuals.get('testId'):
             element['metadata']['testId'] = actuals['testId']
         
-        # Mark as 'healed' in metadata for audit trail
+        # Add audit trail
         element['metadata']['last_healed_at'] = time.time()
         element['metadata']['previous_confidence'] = target_exec.get('confidence_score')
-        
+    
     # 4. Save Flow
     db.save_flow(user_id or "anonymous", graph)
     
@@ -364,6 +365,10 @@ async def heal_flow_step(
         "message": f"Step {request.block_id} healed successfully.",
         "updated_attributes": actuals
     }
+
+
+            
+@app.post("/api/inspector/start")
 async def start_inspector(request: InspectorStartRequest):
     """Start the Live Inspector browser session."""
     global active_inspector

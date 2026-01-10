@@ -36,8 +36,6 @@ export const API_ENDPOINTS = {
   HEALTH: 'http://localhost:8000/api/health',
   BLOCKS_TYPES: 'http://localhost:8000/api/blocks/types',
 
-  // AI Bridge
-  AI_DRAFT: 'http://localhost:8000/api/ai/draft-flow',
 };
 
 export const SAMPLE_FLOW = {

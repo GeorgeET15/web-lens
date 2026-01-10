@@ -2,75 +2,32 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
 from .ai_service import ai_service
-from .schemas import ExecutionInsightInput
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
-class IntentRequest(BaseModel):
-    intent: str
-
-@router.post("/draft-flow")
-async def draft_flow(request: IntentRequest):
-    """[EXPERIMENTAL] Role 1: Converts natural language intent into a DRAFT flow."""
-    import logging
-    logger = logging.getLogger(__name__)
-    try:
-        logger.info(f"[EXPERIMENTAL] AI Translator: Received intent '{request.intent}'")
-        draft = await ai_service.draft_flow(request.intent)
-        logger.info(f"[EXPERIMENTAL] AI Translator: Generated draft (len={len(draft)})")
-        return {"review": draft}
-    except Exception as e:
-        logger.error(f"[EXPERIMENTAL] AI Translator failed: {e}")
-        return {"review": f"Error: AI Translator failed to generate draft: {str(e)}"}
-
-@router.post("/stability-audit")
-async def summarize_scenarios(runs_data: List[dict]):
-    """[EXPERIMENTAL] Role 2: Analyzes execution history for patterns of instability."""
-    summary = await ai_service.analyze_stability(runs_data)
-    return {"summary": summary}
-
-@router.post("/investigate-run")
-async def investgate_run(request: Dict[str, Any]):
-    """[EXPERIMENTAL] Role 3: Explains a specific execution outcome using TAF evidence."""
-    from .utils import strip_heavy_data
-    
-    flow = request.get("flow")
-    result = request.get("result")
-    
-    if not flow or not result:
-        return {"review": "Error: Missing flow or scenario result for investigation."}
-    
-    # Strip heavy data to prevent quota/token issues
-    stripped_flow = strip_heavy_data(flow)
-    stripped_report = strip_heavy_data(result.get("report", {}))
-    
-    payload = {
-        **stripped_flow,
-        "execution_report": stripped_report
+@router.get("/status")
+async def get_ai_status():
+    """Return the status of AI capabilities."""
+    return {
+        "enabled": ai_service.is_enabled(),
+        "provider": "Gemini"
     }
+
+@router.post("/visual-diff")
+async def analyze_visual_diff(request: Dict[str, Any]):
+    """Analyze visual differences between two screenshots."""
+    baseline = request.get("baseline")
+    current = request.get("current")
+    context = request.get("context", "")
     
-    review = await ai_service.investigate_run(payload)
-    return {"review": review}
-
-@router.post("/ask-companion")
-async def ask_companion(insight: ExecutionInsightInput, query: str):
-    """[EXPERIMENTAL] Role 4: Explains WebLens concepts and technical behaviors."""
-    answer = await ai_service.ask_companion(insight, query)
-    return {"answer": answer}
-
-# --- Compatibility Shims ---
+    if not baseline or not current:
+        raise HTTPException(status_code=400, detail="Missing screenshots")
+        
+    result = await ai_service.analyze_visual_diff(baseline, current, context)
+    return {"result": result}
 
 @router.post("/analyze-failure")
-async def legacy_analyze(insight: ExecutionInsightInput):
-    """[EXPERIMENTAL] Compatibility shim for InsightPanel failure analysis."""
-    return {"summary": await ai_service.investigate_run(insight.model_dump())}
-
-@router.post("/inspect")
-async def legacy_inspect(insight: ExecutionInsightInput, query: str):
-    """[EXPERIMENTAL] Compatibility shim for companion queries."""
-    return await ask_companion(insight, query)
-
-@router.post("/scenario-review")
-async def legacy_review(request: Dict[str, Any]):
-    """[EXPERIMENTAL] Compatibility shim for investigator."""
-    return await investgate_run(request)
+async def analyze_failure(request: Dict[str, Any]):
+    """Analyze a test failure using AI."""
+    summary = await ai_service.analyze_failure(request)
+    return {"summary": summary}

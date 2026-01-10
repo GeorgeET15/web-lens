@@ -47,7 +47,7 @@ class BlockType(str, Enum):
     GET_SESSION_STORAGE = "get_session_storage"
     OBSERVE_NETWORK = "observe_network"
     SWITCH_TAB = "switch_tab"
-    AI_PROMPT = "ai_prompt"
+    VISUAL_VERIFY = "visual_verify"
 
 class FileSourceType(str, Enum):
     """Origin of the file asset."""
@@ -138,7 +138,7 @@ class ElementRef(BaseModel):
     - OPTIONAL: metadata, previewImage
     - FORBIDDEN: selectors (CSS/XPath) are strictly excluded logic.
     """
-    id: str = Field(..., description="Unique reference ID")
+    id: Optional[str] = Field(None, description="Unique reference ID")
     role: str = Field(..., min_length=1, description="Semantic Role (button, link, input)")
     name: str = Field(..., min_length=1, description="Accessible Name (visible text or aria-label)")
     name_source: Literal["native", "user_declared"] = Field("native", description="Source of the semantic name")
@@ -260,6 +260,7 @@ class BaseBlock(BaseModel):
     id: str = Field(..., description="Unique block identifier")
     type: BlockType = Field(..., description="Block type")
     next_block: Optional[str] = Field(None, description="ID of next block to execute")
+    task_id: Optional[str] = Field(None, description="ID of the task this block belongs to")
     
     class Config:
         use_enum_values = True
@@ -304,9 +305,22 @@ class WaitUntilVisibleBlock(BaseBlock):
 
 
 class AssertVisibleBlock(BaseBlock):
-    """Assert that an element is visible."""
+    """Assertion: Ensure the target element is visible on the page."""
     type: Literal[BlockType.ASSERT_VISIBLE] = BlockType.ASSERT_VISIBLE
-    description: Optional[str] = Field(None, description="Human-readable description of element")
+    element: ElementRef = Field(..., description="Semantic reference to the element")
+
+
+class VisualVerifyBlock(BaseBlock):
+    """
+    [EXPERIMENTAL] Semantic Visual Regression Testing
+    
+    Performs visual comparison of the current page against a baseline.
+    Uses pixel diff analysis with an AI saliency fallback to distinguish 
+    meaningful changes from cosmetic noise.
+    """
+    type: Literal[BlockType.VISUAL_VERIFY] = BlockType.VISUAL_VERIFY
+    threshold: float = 0.01  # Pixel diff threshold (0.0-1.0) before AI fallback
+    baseline_id: str  # Run ID or URL of baseline screenshot
     element: Optional[ElementRef] = Field(None, description="Zero-code element reference")
 
 
@@ -515,10 +529,7 @@ class SwitchTabBlock(BaseBlock):
     tab_index: Optional[int] = Field(0, description="Index of tab to switch to (if not newest)")
 
 
-class AIPromptBlock(BaseBlock):
-    """[EXPERIMENTAL] Executes a natural language prompt to autonomously determine next steps"""
-    type: Literal[BlockType.AI_PROMPT] = BlockType.AI_PROMPT
-    prompt: str = Field(..., description="Natural language instruction for the agent")
+
 
 
 # Union type for all block types with discriminator for clear error reporting
@@ -557,7 +568,7 @@ Block = Annotated[
         GetSessionStorageBlock,
         ObserveNetworkBlock,
         SwitchTabBlock,
-        AIPromptBlock,
+        VisualVerifyBlock,
     ],
     Discriminator("type")
 ]
@@ -770,9 +781,6 @@ class FlowGraph(BaseModel):
                     if not block.condition.element:
                         errors.append(f"{block_label}: Repeat Until requires an element for '{block.condition.kind}'")
             
-            elif isinstance(block, AIPromptBlock):
-                if not block.prompt or not block.prompt.strip():
-                    errors.append(f"{block_label}: Requires a natural language instruction")
         
         # Evidence-Compatible Saved Values Validation
         # Prohibit {{variables}} in control flow, element selection, and navigation
@@ -873,6 +881,19 @@ class BlockExecution(BaseModel):
     actual_attributes: Optional[Dict[str, Any]] = None
     tier_2_evidence: Optional[Any] = None
 
+class TaskStatus(str, Enum):
+    """Status of a task."""
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class Task(BaseModel):
+    """High-level task identifier for complex operations."""
+    id: str
+    description: str
+    status: TaskStatus = TaskStatus.PENDING
+
 class ExecutionReport(BaseModel):
     """Full report of a flow execution run."""
     run_id: str
@@ -884,6 +905,7 @@ class ExecutionReport(BaseModel):
     duration_ms: float = 0
     success: Optional[bool] = None
     blocks: List[BlockExecution] = Field(default_factory=list)
+    tasks: List[Task] = Field(default_factory=list)
     error: Optional[UserFacingError] = None
     result: Optional[ExecutionResult] = None
     scenario_values: Dict[str, Any] = Field(default_factory=dict)
