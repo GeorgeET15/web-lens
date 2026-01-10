@@ -6,7 +6,7 @@ import { InsightPanel } from './InsightPanel';
 import { DownloadDropdown } from '../DownloadDropdown';
 import { ExecutionList } from './ExecutionList';
 import { API_ENDPOINTS } from '../../config/api';
-import { Terminal, X, History, ChevronLeft, Share2 } from 'lucide-react';
+import { Terminal, History, ChevronLeft, Share2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface Props {
@@ -22,7 +22,6 @@ export const ExecutionExplorer: React.FC<Props> = ({
   onBlockSelect,
   selectedBlockId: externalSelectedId,
   className,
-  onClose
 }) => {
   const [activeReport, setActiveReport] = useState<ExecutionReport | null>(initialReport);
   const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
@@ -67,58 +66,62 @@ export const ExecutionExplorer: React.FC<Props> = ({
       <div 
         className={cn(
           "flex-none transition-all duration-300 border-r border-zinc-900 bg-black relative flex flex-col",
-          isSidebarOpen ? "w-[300px]" : "w-0 overflow-hidden border-none"
+          isSidebarOpen ? "w-[300px]" : "w-[32px] items-center" 
         )}
       >
-        <div className="flex-none p-4 border-b border-zinc-900 bg-zinc-950/50 flex items-center justify-between">
-           <div className="flex items-center gap-2">
-             <Terminal className="w-4 h-4 text-zinc-500" />
-             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Execution History</span>
-           </div>
-           <div className="flex items-center gap-1">
-              <button 
-                onClick={() => setIsSidebarOpen(false)}
-                className="p-1 rounded hover:bg-white/10 text-zinc-500 hover:text-white transition-colors"
-                title="Collapse Sidebar"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              {onClose && (
-                <button 
-                  onClick={onClose}
-                  className="p-1 rounded hover:bg-white/10 text-zinc-500 hover:text-white transition-colors border-l border-white/5 ml-1 pl-1"
-                  title="Close Explorer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-           </div>
+        <div className={cn(
+            "flex-none border-b border-zinc-900 bg-zinc-950/50 flex w-full", 
+            // Fixed height h-12 (48px) for both states to match other headers perfectly
+            isSidebarOpen ? "h-12 px-4 justify-between items-center" : "h-12 justify-center items-center p-0"
+        )}>
+           {isSidebarOpen ? (
+               <>
+                <div className="flex items-center gap-2">
+                    <Terminal className="w-4 h-4 text-zinc-500" />
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">History</span>
+                </div>
+                <div className="flex items-center gap-1">
+                    <button 
+                        onClick={() => setIsSidebarOpen(false)}
+                        className="p-1 rounded hover:bg-white/10 text-zinc-500 hover:text-white transition-colors"
+                        title="Collapse Sidebar"
+                    >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                </div>
+               </>
+           ) : (
+                <div className="flex flex-col items-center py-2">
+                    <button 
+                        onClick={() => setIsSidebarOpen(true)}
+                        className="p-1.5 rounded hover:bg-white/10 text-zinc-500 hover:text-white transition-colors"
+                        title="Expand History"
+                    >
+                        <History className="w-3.5 h-3.5" />
+                    </button>
+                </div>
+           )}
         </div>
 
-        <ExecutionList 
-           onSelect={handleRunSelect} 
-           selectedRunId={activeReport?.run_id}
-           className="w-full border-none" 
-        />
+        {/* Content - Hidden when collapsed */}
+        <div className={cn("flex-1 w-full overflow-hidden transition-opacity duration-200", !isSidebarOpen && "opacity-0 invisible pointer-events-none")}>
+            <ExecutionList 
+                onSelect={handleRunSelect} 
+                selectedRunId={activeReport?.run_id}
+                className="w-full border-none" 
+            />
+        </div>
       </div>
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
-        {!isSidebarOpen && (
-            <button 
-                onClick={() => setIsSidebarOpen(true)}
-                className="absolute top-2.5 left-2.5 z-20 p-1.5 hover:bg-zinc-800 text-zinc-500 hover:text-white rounded transition-all"
-                title="Show History"
-            >
-                <History className="w-3.5 h-3.5" />
-            </button>
-        )}
+        {/* Removed Absolute Button: handled by persistent sidebar now */}
 
         {activeReport ? (
             <div className="flex-1 flex h-full overflow-hidden animate-in fade-in duration-300">
                 {/* Timeline */}
                 <div className="w-1/4 min-w-[260px] max-w-[320px] border-r border-zinc-900 overflow-y-auto scrollbar-hide bg-zinc-950/30">
-                    <div className="p-3 border-b border-zinc-900 bg-black/20 flex items-center justify-between pl-12"> {/* pl-12 to provide breathing room for the toggle button */}
+                    <div className="h-12 border-b border-zinc-900 bg-black/20 flex items-center justify-between px-4"> {/* h-12 to match sidebar */ }
                         <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Execution Log</span>
                         <span className="px-1.5 py-0.5 rounded-full bg-zinc-900 text-[8px] font-bold text-zinc-400 border border-white/5">
                             {activeReport.blocks.length} STEPS
@@ -147,7 +150,7 @@ export const ExecutionExplorer: React.FC<Props> = ({
 
                 {/* Insight */}
                 <div className="w-1/4 min-w-[300px] max-w-[400px] overflow-y-auto bg-black scrollbar-hide flex flex-col">
-                    <div className="p-3 border-b border-zinc-900 bg-black/20 flex-none flex items-center justify-between">
+                    <div className="h-12 border-b border-zinc-900 bg-black/20 flex-none flex items-center justify-between px-4">
                         <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Insights</span>
                         <div className="flex items-center gap-1.5">
                             <DownloadDropdown runId={activeReport.run_id} type="execution" />
