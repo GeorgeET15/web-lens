@@ -8,7 +8,11 @@ export interface SavedFlowMetadata {
   id: string;
   name: string;
   updatedAt: number;
+  lastUsedAt?: number;
+  lastRun?: string | number;
   source?: 'local' | 'cloud';
+  sources?: ('local' | 'cloud')[];
+  primarySource?: 'local' | 'cloud';
 }
 
 export interface SavedFlow extends SavedFlowMetadata {
@@ -29,9 +33,17 @@ export const FlowStorage = {
 
   list: (): SavedFlowMetadata[] => {
     const all = FlowStorage.getAll();
+    const usage = FlowStorage.getUsageMap();
     return Object.values(all)
-      .map(({ id, name, updatedAt }) => ({ id, name, updatedAt, source: 'local' as const }))
-      .sort((a, b) => b.updatedAt - a.updatedAt);
+      .map(({ id, name, updatedAt }) => ({ 
+          id, 
+          name, 
+          updatedAt, 
+          lastUsedAt: usage[id],
+          source: 'local' as const,
+          sources: ['local' as const]
+      }))
+      .sort((a, b) => (b.lastUsedAt || b.updatedAt) - (a.lastUsedAt || a.updatedAt));
   },
 
   save: (flow: FlowGraph, existingId?: string): SavedFlowMetadata => {
@@ -43,7 +55,8 @@ export const FlowStorage = {
       name: flow.name,
       updatedAt: Date.now(),
       flow,
-      source: 'local'
+      source: 'local',
+      sources: ['local']
     };
 
     all[id] = record;
@@ -86,16 +99,35 @@ export const FlowStorage = {
 
       if (!res.ok) return [];
       const cloudFlows = await res.json();
+      const usage = FlowStorage.getUsageMap();
       
       return cloudFlows.map((f: any) => ({
         id: f.id,
         name: f.name,
         updatedAt: new Date(f.updated_at).getTime(),
-        source: 'cloud'
-      }));
+        lastRun: f.last_run,
+        lastUsedAt: usage[f.id] || (f.last_run ? new Date(f.last_run).getTime() : undefined),
+        source: 'cloud',
+        sources: ['cloud']
+      })).sort((a: any, b: any) => (b.lastUsedAt || b.updatedAt) - (a.lastUsedAt || a.updatedAt));
     } catch (e) {
       console.error('Cloud list failed', e);
       return [];
+    }
+  },
+
+  trackUsageCloud: async (id: string): Promise<void> => {
+    try {
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      if (!token) return;
+
+      await fetch(`${API_BASE}/usage/track-flow/${id}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+    } catch (e) {
+      console.error('Cloud usage tracking failed', e);
     }
   },
 
@@ -149,5 +181,25 @@ export const FlowStorage = {
       delete all[id];
       localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
     }
+  },
+
+  // --- Usage Tracking ---
+  trackUsage: (id: string) => {
+    try {
+      const usage = JSON.parse(localStorage.getItem('antigravity_flow_usage') || '{}');
+      usage[id] = Date.now();
+      localStorage.setItem('antigravity_flow_usage', JSON.stringify(usage));
+    } catch (e) {
+      console.error('Failed to track usage', e);
+    }
+  },
+
+  getUsageMap: (): Record<string, number> => {
+    try {
+      return JSON.parse(localStorage.getItem('antigravity_flow_usage') || '{}');
+    } catch (e) {
+      return {};
+    }
   }
 };
+

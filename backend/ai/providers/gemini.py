@@ -7,7 +7,7 @@ from .interface import LLMProvider
 class GeminiProvider(LLMProvider):
     def __init__(self):
         # Support both GOOGLE_API_KEY and GEMINI_API_KEY
-        self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        self.api_key = os.getenv("GEMINI_API_KEY")
         self._llm = None
         if self.api_key:
             model_name = "gemini-2.5-flash"
@@ -50,7 +50,7 @@ class GeminiProvider(LLMProvider):
             return response.content
         except Exception as e:
             print(f"Gemini multimodal generation error: {e}")
-            return None
+            raise e
 
     def _init_llm(self):
         """Internal helper to initialize the LangChain client."""

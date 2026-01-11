@@ -96,6 +96,18 @@ class SupabaseService:
             logger.error(f"Failed to save flow to Supabase: {e}")
             return None
 
+    def track_flow_usage(self, flow_id: str, user_id: str) -> bool:
+        """Updates the last_run timestamp for a flow."""
+        if not self.is_enabled():
+            return False
+
+        try:
+            self.client.table("flows").update({"last_run": "now()"}).eq("id", flow_id).eq("user_id", user_id).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to track flow usage in Supabase: {e}")
+            return False
+
     def save_execution(self, user_id: str, report: Dict[str, Any]) -> Optional[str]:
         """Saves execution report to the database."""
         if not self.is_enabled():

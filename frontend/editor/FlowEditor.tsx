@@ -22,7 +22,7 @@ import {
 
 import type { FlowGraph } from '../types/flow';
 import { BaseBlock, BaseBlockOverlay } from './blocks/BaseBlock';
-import { Plus, Minus, Save, FolderOpen, Trash2, X, LocateFixed, Globe, Laptop } from 'lucide-react';
+import { Plus, Minus, Save, FolderOpen, Trash2, X, LocateFixed, Globe, Laptop, Wand2 } from 'lucide-react';
 import { FlowStorage, SavedFlowMetadata } from '../lib/storage';
 import { OnboardingModal } from '../components/OnboardingModal';
 import { supabase } from '../lib/supabase';
@@ -33,6 +33,7 @@ import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { ScenarioPanel } from '../components/ScenarioPanel';
 import { EditorBlock, BlockType, SavedValue, ScenarioSuiteReport } from './entities';
 import { ScenarioSuiteDashboard } from '../components/execution/ScenarioSuiteDashboard';
+import { GeniePrompt } from '../components/ai/GeniePrompt';
 
 import { cn } from '../lib/utils';
 import { Skeleton } from '../components/Skeleton';
@@ -45,6 +46,7 @@ export interface FlowEditorRef {
   clearHighlighting: () => void;
   scrollToBlock: (blockId: string) => void;
   createNewFlow: () => void;
+  loadFlow: (flow: FlowGraph) => void;
   exportFlow: () => void;
   triggerImport: () => void;
 }
@@ -58,7 +60,25 @@ export const LAYOUT_CONSTANTS = {
     GRID_SIZE: 20
 };
 
+function getRelativeTime(dateString: string | number | Date): string {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    const diffWeeks = Math.floor(diffDays / 7);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+    return `${diffWeeks} week${diffWeeks !== 1 ? 's' : ''} ago`;
+}
+
 import { ExecutionReport } from '../types/execution';
+
+import { Environment } from '../types/environment';
 
 interface FlowEditorProps {
   onFlowChange?: (flow: FlowGraph | null) => void;
@@ -71,6 +91,8 @@ interface FlowEditorProps {
   onViewScenario?: (runId: string) => void;
   lastReport?: ExecutionReport | null;
   externalVariables?: { key: string, label: string }[];
+  environments?: Environment[];
+  selectedEnvironmentId?: string;
 }
 
 
@@ -212,7 +234,9 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
     showOnboarding,
     setShowOnboarding,
     onViewScenario,
-    externalVariables = []
+    externalVariables = [],
+    environments = [],
+    selectedEnvironmentId = ''
   }, ref) => {
     // State for blocks
     const [blocks, setBlocks] = useState<EditorBlock[]>([]);
@@ -235,6 +259,9 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
     const [isProcessing, setIsProcessing] = useState(false);
     const [processingMessage, setProcessingMessage] = useState('Processing...');
     
+    // Genie AI Side Panel
+    const [isGenieOpen, setIsGenieOpen] = useState(false);
+
     // Block search
     const [blockSearchQuery, setBlockSearchQuery] = useState('');
 
@@ -293,6 +320,29 @@ const [dialogConfig, setDialogConfig] = useState<{
       return saved ? parseInt(saved, 10) : 256;
     });
     const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+
+    // Calculate active variables for AI context
+    const activeVariables = useMemo(() => {
+        const vars: Record<string, string> = {};
+        
+        // 1. Environment Variables (lowest precedence)
+        const selectedEnv = environments.find(e => e.id === selectedEnvironmentId);
+        if (selectedEnv?.variables) {
+            Object.assign(vars, selectedEnv.variables);
+        }
+        
+        // 2. Global Variables (flow-level)
+        globalVariables.forEach(gv => {
+            if (gv.key) vars[gv.key] = gv.value;
+        });
+
+        // 3. External Variables (labels/keys from props)
+        externalVariables.forEach(ev => {
+            if (ev.key) vars[ev.key] = `{{EXTERNAL:${ev.key}}}`;
+        });
+
+        return vars;
+    }, [environments, selectedEnvironmentId, globalVariables, externalVariables]);
 
     useEffect(() => {
       const flow = FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, schemaVersion);
@@ -397,6 +447,26 @@ const [dialogConfig, setDialogConfig] = useState<{
         },
         createNewFlow: () => {
             resetToNewFlow();
+        },
+        loadFlow: (flow) => {
+            const state = FlowTransformer.toEditorState(flow);
+            setBlocks(state.blocks);
+            setFlowName(state.name);
+            setFlowDescription(state.description || '');
+            setGlobalVariables(state.variables);
+            setScenarioSets(state.scenarioSets);
+            setSchemaVersion(state.schemaVersion);
+            setCurrentFlowId(flow.id || null);
+            setIsLoadModalOpen(false);
+            if (flow.id) {
+                FlowStorage.trackUsage(flow.id);
+                // Also track on cloud if it's a cloud flow
+                const isCloud = savedFlows.find(f => f.id === flow.id)?.sources?.includes('cloud');
+                if (isCloud) {
+                    FlowStorage.trackUsageCloud(flow.id);
+                }
+            }
+            resetView();
         },
         exportFlow: () => {
             handleExport();
@@ -785,7 +855,19 @@ const [dialogConfig, setDialogConfig] = useState<{
                 }
             });
             
-            setSavedFlows(Array.from(mergedMap.values()));
+            
+            const sortedFlows = Array.from(mergedMap.values()).sort((a: any, b: any) => {
+                const usedA = a.lastUsedAt || 0;
+                const usedB = b.lastUsedAt || 0;
+                
+                // 1. Primary Sort: Usage Time (Recency of Load)
+                if (usedA !== usedB) return usedB - usedA;
+                
+                // 2. Secondary Sort: Update Time (for never-loaded items)
+                return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+            });
+            
+            setSavedFlows(sortedFlows);
         } finally {
             setIsLoadingSavedFlows(false);
         }
@@ -804,6 +886,15 @@ const [dialogConfig, setDialogConfig] = useState<{
             } else {
                 flow = FlowStorage.load(id);
             }
+
+            if (ref && 'current' in ref && ref.current && flow) {
+                // Ensure ID is carried over (critical for usage tracking)
+                if (!flow.id) flow.id = id;
+                
+                await ref.current.loadFlow(flow);
+            }
+        } catch (e) {
+            console.error('Failed to load flow:', e);
         } finally {
             setIsProcessing(false);
         }
@@ -1513,6 +1604,17 @@ const [dialogConfig, setDialogConfig] = useState<{
                 <LocateFixed className="w-4 h-4 group-hover:scale-110 transition-transform" />
              </button>
 
+             <button 
+                onClick={() => setIsGenieOpen(!isGenieOpen)}
+                className={cn(
+                    "flex items-center justify-center p-3 bg-zinc-950 border rounded-xl transition-all shadow-[0_10px_40px_rgba(0,0,0,0.5)] active:scale-95 group",
+                    isGenieOpen ? "border-indigo-500 text-indigo-400" : "border-white/10 text-zinc-400 hover:text-white hover:bg-zinc-900"
+                )}
+                title="Toggle Genie AI"
+             >
+                <Wand2 className={cn("w-4 h-4 transition-transform", isGenieOpen ? "scale-110" : "group-hover:rotate-12")} />
+             </button>
+
              
              <div className="bg-zinc-950 border border-white/10 rounded-xl p-1.5 flex flex-col items-center gap-1.5 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
                 <button 
@@ -1597,7 +1699,10 @@ const [dialogConfig, setDialogConfig] = useState<{
                                                 ))}
                                             </div>
                                         </div>
-                                        <div className="text-[9px] font-bold text-zinc-600 uppercase tracking-tight">{new Date(f.updatedAt).toLocaleString()}</div>
+                                        <div className="text-[9px] font-bold text-zinc-600 uppercase tracking-tight">
+                                            {f.lastUsedAt ? 'Loaded ' : 'Updated '} 
+                                            {getRelativeTime(f.lastUsedAt || f.updatedAt)}
+                                        </div>
                                     </div>
                                     <button 
                                         onClick={async (e) => {
@@ -1686,7 +1791,27 @@ const [dialogConfig, setDialogConfig] = useState<{
             </div>
         )}
         
-        </div> {/* End Main Content Area Wrapper */}
+        </div>
+
+        {/* Right Sidebar - Genie AI */}
+        <div 
+          style={{ width: isGenieOpen ? '320px' : '0px' }}
+          className={cn(
+            "flex flex-col border-l border-zinc-900 bg-black relative z-40 overflow-hidden",
+            isGenieOpen ? "opacity-100" : "opacity-0 pointer-events-none",
+            "transition-all duration-300"
+          )}
+        >
+          <GeniePrompt 
+                isSidePanel 
+                onFlowGenerated={(flow) => {
+                    performLoad(flow, crypto.randomUUID(), false);
+                }}
+                addToast={(window as any).addToast}
+                variables={activeVariables}
+                onClose={() => setIsGenieOpen(false)}
+             />
+        </div>
 
         {/* Global Resize Overlay */}
         {isResizingSidebar && (

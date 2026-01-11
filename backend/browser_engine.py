@@ -863,7 +863,17 @@ class SeleniumEngine(BrowserEngine):
              raise BrowserEngineError("Invalid element handle")
 
         try:
-            return handle.is_displayed()
+            if not handle.is_displayed():
+                return False
+            
+            # Strict Zero-Size Check: ensure element has physical dimensions
+            # click() throws error for 0x0 elements even if is_displayed() is true
+            rect = handle.rect
+            if rect['width'] <= 0 or rect['height'] <= 0:
+                logger.debug(f"Element is displayed but has zero size ({rect['width']}x{rect['height']}). Treating as invisible.")
+                return False
+                
+            return True
         except:
             return False
 

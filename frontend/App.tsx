@@ -25,7 +25,7 @@ import { MobileRestricted } from './components/MobileRestricted';
 
 
 function Dashboard() {
-  const { session } = useAuth();
+  const { session, user } = useAuth();
   const [currentFlow, setCurrentFlow] = useState<FlowGraph | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
@@ -443,7 +443,7 @@ function Dashboard() {
       <header className="flex-none h-14 border-b border-gray-800 bg-black z-50">
         <div className="flex h-full items-center justify-between px-6">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-8 h-8 bg-white/5 rounded-md border border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.05)]">
+            <div className="flex items-center justify-center w-8 h-8 bg-white/5 rounded-md border border-white/10">
               <Layers className="w-5 h-5 text-white" />
             </div>
             <h1 className="text-sm font-black tracking-[0.2em] text-white uppercase">
@@ -467,7 +467,7 @@ function Dashboard() {
 
                   <button 
                     onClick={handleNewFlow}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-white border border-white text-black hover:bg-zinc-200 transition-all active:scale-95 group shadow-[0_0_15px_rgba(255,255,255,0.1)]"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-white border border-white text-black hover:bg-zinc-200 transition-all active:scale-95 group"
                     title="Start Fresh"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -549,10 +549,18 @@ function Dashboard() {
                 {/* Profile Group */}
                 <button 
                   onClick={() => setView('settings')}
-                  className={`p-2 border rounded-lg transition-all ${view === 'settings' ? 'bg-white text-black border-white' : 'bg-white/5 border-white/5 text-zinc-600 hover:text-white hover:border-white/20'}`}
+                  className={`border rounded-lg transition-all flex items-center justify-center overflow-hidden ${view === 'settings' ? 'bg-white text-black border-white' : 'bg-white/5 border-white/5 text-zinc-600 hover:text-white hover:border-white/20'}`}
                   title="Profile & Settings"
                 >
-                  <User className="w-3.5 h-3.5" />
+                  {user?.user_metadata?.avatar_url || user?.user_metadata?.picture ? (
+                    <img 
+                      src={user.user_metadata.avatar_url || user.user_metadata.picture} 
+                      alt="Profile" 
+                      className="w-8 h-8 rounded object-cover" 
+                    />
+                  ) : (
+                    <User className="w-3.5 h-3.5" />
+                  )}
                 </button>
               </>
             )}
@@ -597,6 +605,8 @@ function Dashboard() {
                 onBlockClick={(id) => setSelectedBlockId(id)}
                 showOnboarding={showOnboarding}
                 setShowOnboarding={setShowOnboarding}
+                environments={environments}
+                selectedEnvironmentId={selectedEnvironmentId}
                 onViewScenario={(runId) => {
                     fetchExecutionReport(runId);
                     setIsExplorerOpen(true);

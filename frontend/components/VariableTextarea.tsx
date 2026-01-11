@@ -1,39 +1,52 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Database } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-interface VariableInputProps {
+interface VariableTextareaProps {
     value: string;
     onChange: (value: string) => void;
     savedValues?: { key: string; label: string }[];
     placeholder?: string;
     className?: string;
-    autoFocus?: boolean;
     disabled?: boolean;
+    onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+    onBlur?: () => void;
+    autoFocus?: boolean;
 }
 
-export function VariableInput({ value, onChange, savedValues, placeholder, className, autoFocus, disabled }: VariableInputProps) {
+export function VariableTextarea({ 
+    value, 
+    onChange, 
+    savedValues, 
+    placeholder, 
+    className,
+    disabled,
+    onKeyDown,
+    onBlur,
+    autoFocus
+}: VariableTextareaProps) {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [filter, setFilter] = useState('');
     const [cursorPos, setCursorPos] = useState(0);
-    const inputRef = useRef<HTMLInputElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const overlayRef = useRef<HTMLDivElement>(null);
     const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null);
 
     const updateCoords = () => {
-        if (inputRef.current) {
-            const rect = inputRef.current.getBoundingClientRect();
+        if (textareaRef.current) {
+            const rect = textareaRef.current.getBoundingClientRect();
             const viewportHeight = window.innerHeight;
             const viewportWidth = window.innerWidth;
             
-            // Default position: below the input
+            // Default position: below the textarea
             let top = rect.bottom + window.scrollY;
             let left = rect.left + window.scrollX;
             
             // Check if dropdown would overflow bottom of viewport
             const dropdownHeight = 200; // max-h-48 = ~192px
             if (rect.bottom + dropdownHeight > viewportHeight) {
-                // Position above input instead
+                // Position above textarea instead
                 top = rect.top + window.scrollY - dropdownHeight - 2; // 2px gap
             }
             
@@ -62,7 +75,7 @@ export function VariableInput({ value, onChange, savedValues, placeholder, class
         };
     }, [showSuggestions]);
 
-    const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const val = e.target.value;
         const pos = e.target.selectionStart || 0;
         setCursorPos(pos);
@@ -84,21 +97,69 @@ export function VariableInput({ value, onChange, savedValues, placeholder, class
         const textAfter = value.slice(cursorPos);
         onChange(textBefore + textAfter);
         setShowSuggestions(false);
+        
+        // Return focus
+        setTimeout(() => textareaRef.current?.focus(), 10);
     };
+
+    // Create highlighted HTML for overlay
+    const highlightedHTML = useMemo(() => {
+        if (!value) return '';
+        
+        // Escape HTML and highlight variables
+        const escaped = value
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n/g, '<br/>');
+        
+        // Highlight {{VARIABLE}} patterns - only change color, not weight
+        return escaped.replace(/\{\{([^}]+)\}\}/g, '<span style="color: rgb(129, 140, 248);">{{$1}}</span>');
+    }, [value]);
 
     return (
         <div className={cn("relative w-full", showSuggestions && "z-[9999]")}>
-            <input 
-                ref={inputRef}
-                type="text"
+            {/* Syntax highlighting overlay */}
+            <div 
+                ref={overlayRef}
+                className={cn(
+                    "absolute inset-0 pointer-events-none whitespace-pre-wrap break-words overflow-hidden",
+                    className // Keep all classes for font/layout matching
+                )}
+                style={{
+                    color: 'rgb(212, 212, 216)', // zinc-300
+                    backgroundColor: 'transparent',
+                }}
+                dangerouslySetInnerHTML={{ __html: highlightedHTML }}
+            />
+            
+            {/* Actual textarea (transparent text) */}
+            <textarea 
+                ref={textareaRef}
                 value={value}
                 onChange={handleInput}
+                onScroll={(e) => {
+                    if (overlayRef.current) {
+                        overlayRef.current.scrollTop = e.currentTarget.scrollTop;
+                    }
+                }}
+                onClick={(e) => setCursorPos(e.currentTarget.selectionStart || 0)}
+                onKeyUp={(e) => setCursorPos(e.currentTarget.selectionStart || 0)}
                 placeholder={placeholder}
-                className={className}
-                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                autoFocus={autoFocus}
+                className={cn(className, "relative caret-white")}
+                style={{
+                    color: 'transparent',
+                    WebkitTextFillColor: 'transparent',
+                }}
+                onBlur={() => {
+                    setTimeout(() => setShowSuggestions(false), 200);
+                    onBlur?.();
+                }}
+                onKeyDown={onKeyDown}
                 disabled={disabled}
+                autoFocus={autoFocus}
             />
+            
             {showSuggestions && coords && createPortal(
                 <div 
                     className="fixed z-[10000] bg-zinc-900 border border-indigo-500/50 rounded-lg shadow-2xl max-h-48 overflow-y-auto scrollbar-hide"
@@ -108,7 +169,7 @@ export function VariableInput({ value, onChange, savedValues, placeholder, class
                         width: coords.width,
                     }}
                 >
-                    <div className="p-1 text-[9px] text-zinc-500 uppercase font-bold border-b border-white/5 px-2 bg-black/20">Suggestions</div>
+                    <div className="p-1 px-2 text-[9px] text-zinc-500 uppercase font-black border-b border-white/5 bg-black/20">Suggestions</div>
                     {savedValues?.filter((v: any) => v.key.toLowerCase().includes(filter.toLowerCase())).map((v: any) => (
                         <button
                             key={v.key}

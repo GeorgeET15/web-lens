@@ -196,7 +196,8 @@ function findSemantic(ref) {
             ariaLabel: cand.el.getAttribute('aria-label'),
             placeholder: cand.el.getAttribute('placeholder'),
             title: cand.el.title || cand.el.getAttribute('title'),
-            tagName: cand.el.tagName.toLowerCase()
+            tagName: cand.el.tagName.toLowerCase(),
+            snippet: cand.el.outerHTML.substring(0, 1000)
         },
         breakdown: cand.breakdown
     }));

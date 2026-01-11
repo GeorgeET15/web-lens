@@ -49,6 +49,7 @@ from browser_engine import BrowserEngine, BrowserEngineError
 from resolution import ElementResolver, FileResolver
 from taf import TAFRegistry
 from ai.ai_service import ai_service
+from structural_visual_service import structural_visual_service
 
 
 class InterpreterContext:
@@ -326,6 +327,25 @@ class BlockInterpreter:
                     
                     if final_score < 0.7:
                         self.context.emit_taf("trace", f"[Semantic Health] Confidence dip: {final_score:.2f}. Potential contextual drift detected.")
+                        
+                        # Trigger LLM-Augmented Active Healing
+                        if ai_service.is_enabled():
+                            try:
+                                # Run async healing proposal in the current thread's loop
+                                # Since we are in a background thread, we can create a temporary loop
+                                loop = asyncio.new_event_loop()
+                                proposal = loop.run_until_complete(ai_service.propose_healing_candidate(target_ref.model_dump(), candidates))
+                                loop.close()
+                                
+                                if proposal and proposal.get("decision") == "HEAL":
+                                    self.context.emit_taf("analysis", f"AI Healing Advisor: I suspect the page has changed. {proposal.get('reasoning')}")
+                                    self.context.emit_taf("analysis", f"Recommendation: {proposal.get('proposed_fix')}")
+                                    # We keep the best match from MAWS but flag the AI's preferred alternative if it differs
+                                    best_idx = proposal.get("best_index", 0)
+                                    if best_idx > 0 and best_idx < len(candidates):
+                                        self.context.emit_taf("trace", f"AI prefers candidate at index {best_idx}. Score: {candidates[best_idx].get('score')}")
+                            except Exception as ai_err:
+                                self.context.emit_taf("trace", f"AI healing advisor failed: {str(ai_err)}")
                     
                     # Store score and actuals in context
                     if hasattr(self, 'context'):
@@ -1717,16 +1737,16 @@ class BlockInterpreter:
                 task.status = status
                 break
 
-    def _fetch_baseline(self, baseline_id: str) -> Optional[str]:
-        """Fetch baseline screenshot as base64."""
+    def _fetch_baseline(self, baseline_id: str) -> tuple[Optional[str], Optional[str]]:
+        """Fetch baseline screenshot and structure."""
         if baseline_id.startswith("http"):
             try:
                 resp = httpx.get(baseline_id)
                 if resp.status_code == 200:
-                    return base64.b64encode(resp.content).decode('ascii')
+                    return base64.b64encode(resp.content).decode('ascii'), None
             except Exception as e:
                 self.context.log(f" Failed to fetch baseline URL: {e}")
-                return None
+                return None, None
         
         # Try fetching from DB
         from database import db
@@ -1740,27 +1760,35 @@ class BlockInterpreter:
                     for b in reversed(blocks):
                         if b.get('screenshot'):
                             ss = b['screenshot']
+                            structure = b.get('structure')
                             if ss.startswith("http"):
-                                return self._fetch_baseline(ss)
-                            return ss
+                                img, _ = self._fetch_baseline(ss)
+                                return img, structure
+                            return ss, structure
             except Exception as e:
                 self.context.log(f" DB Fetch failed for baseline {baseline_id}: {e}")
+                return None, None
         
-        return None
+        return None, None
 
     def _execute_visual_verify(self, block: VisualVerifyBlock) -> None:
         """
-        [EXPERIMENTAL] Perform Semantic Visual Regression.
+        [EXPERIMENTAL] Perform Semantic Visual Regression (V2.0: Hybrid Pixel + Structural).
         """
         current_screenshot = self.engine.take_screenshot()
-        self.context.current_evidence = {"current": current_screenshot}
+        current_structure = structural_visual_service.get_snapshot(self.engine)
+        
+        self.context.current_evidence = {
+            "current": current_screenshot,
+            "structure": current_structure
+        }
         
         if not block.baseline_id:
             self.context.log(" No baseline provided. Capturing this as the potential baseline.")
             self.context.emit_taf("feedback", "No baseline ID. Visual verification skipped (Baseline mode).")
             return
 
-        baseline_b64 = self._fetch_baseline(self._interpolate(block.baseline_id))
+        baseline_b64, baseline_structure = self._fetch_baseline(self._interpolate(block.baseline_id))
 
         if not baseline_b64:
              self.context.log(f" Baseline {block.baseline_id} not found. Skipping comparison.")
@@ -1770,13 +1798,25 @@ class BlockInterpreter:
         px_diff = self._get_pixel_diff(baseline_b64, current_screenshot)
         self.context.log(f" Pixel Difference: {px_diff*100:.2f}%")
         
+        # 2. Structural Check (V2.0)
+        struct_diff = 1.0 # Default to completely different if no baseline structure
+        if baseline_structure:
+            struct_diff = structural_visual_service.compare(baseline_structure, current_structure)
+            self.context.log(f" Structural Difference: {struct_diff*100:.2f}%")
+            
+            # HYBRID DECISION: If structure is identical, minor pixel diff is likely noise (ads, dynamic text)
+            if struct_diff == 0.0 and px_diff < 0.1: # 10% threshold for stable structure
+                self.context.log(" Structural identity detected. Pixel drift ignored as cosmetic noise.")
+                self.context.emit_taf("analysis", f"Structural Match (0% diff): Pixel drift ({px_diff*100:.2f}%) ignored.")
+                return
+
         if px_diff <= block.threshold:
             self.context.log(" Visual state stable (within threshold).")
             self.context.emit_taf("analysis", f"Pixel-perfect match (diff={px_diff*100:.4f}% < {block.threshold*100}%)")
             return
 
-        # 2. Semantic AI Fallback
-        self.context.log(" Pixel diff exceeds threshold. Invoking AI Saliency Advisor...")
+        # 3. Semantic AI Fallback
+        self.context.log(" Visual/Structural diff exceeds safe thresholds. Invoking AI Saliency Advisor...")
         
         # Get Perception Data
         try:

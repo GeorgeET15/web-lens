@@ -855,10 +855,8 @@ async def list_flows(user_id: Optional[str] = Depends(get_current_user)):
                         "name": record['name'],
                         "description": record.get('description'),
                         "updated_at": record['updated_at'],
+                        "last_run": record.get('last_run'),
                         "source": "cloud",
-                        # Return full graph or just summary? For now, we return full graph locally but maybe summary list 
-                        # usually involves less data. But frontend expects full load? 
-                        # Let's just return the graph so it can be loaded.
                         "graph": record['graph']
                     })
             except Exception as e:
@@ -885,6 +883,24 @@ async def save_flow(request: FlowExecutionRequest, user_id: Optional[str] = Depe
         raise HTTPException(status_code=500, detail="Failed to save flow")
         
     return {"id": flow_id, "message": "Flow saved successfully"}
+
+
+@app.post("/api/usage/track-flow/{flow_id}")
+async def track_flow_usage(flow_id: str, user_id: Optional[str] = Depends(get_current_user)):
+    """Track flow usage in Supabase."""
+    if not user_id:
+        # We only track usage for authenticated users on cloud flows
+        return {"status": "skipped", "message": "Authentication required for cloud usage tracking"}
+        
+    from database import db
+    if not db.is_enabled():
+        return {"status": "skipped", "message": "Cloud storage unavailable"}
+        
+    success = db.track_flow_usage(flow_id, user_id)
+    if not success:
+        logger.warning(f"Failed to track usage for flow {flow_id}")
+        
+    return {"status": "success" if success else "failed"}
 
 
 @app.delete("/api/flows/{flow_id}")
