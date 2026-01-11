@@ -2,7 +2,9 @@ import { FlowGraph } from '../types/flow';
 import { supabase } from './supabase';
 
 const STORAGE_KEY = 'antigravity_flows';
-const API_BASE = 'http://localhost:8000/api';
+// Use window.location for runtime detection (works in packaged app)
+const isDev = window.location.hostname === 'localhost' && window.location.port === '5173';
+const API_BASE = isDev ? 'http://localhost:8000/api' : `${window.location.protocol}//${window.location.host}/api`;
 
 export interface SavedFlowMetadata {
   id: string;

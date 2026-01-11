@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, AlertCircle, Sparkles, Github } from 'lucide-react';
+import { Loader2, AlertCircle, Github } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -92,8 +92,8 @@ export default function Login() {
           
           <div className="p-8 pb-10">
             <div className="flex flex-col items-center mb-10 mt-2">
-              <div className="w-14 h-14 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center mb-4 shadow-inner group-hover:border-indigo-500/30 transition-colors duration-500">
-                <Sparkles className="w-7 h-7 text-white" />
+              <div className="w-14 h-14 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center mb-4 shadow-inner group-hover:border-indigo-500/30 transition-colors duration-500 overflow-hidden">
+                <img src="/logo-no-bg.png" alt="WebLens" className="w-10 h-10 object-contain" />
               </div>
               <h1 className="text-xl font-black text-white tracking-widest uppercase mb-1">WebLens</h1>
               <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em] opacity-80">Autonomous Visual Testing</p>

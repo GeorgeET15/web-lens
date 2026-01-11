@@ -443,8 +443,8 @@ function Dashboard() {
       <header className="flex-none h-14 border-b border-gray-800 bg-black z-50">
         <div className="flex h-full items-center justify-between px-6">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-8 h-8 bg-white/5 rounded-md border border-white/10">
-              <Layers className="w-5 h-5 text-white" />
+            <div className="flex items-center justify-center w-8 h-8 rounded-md overflow-hidden">
+              <img src="/logo-no-bg.png" alt="WebLens" className="w-full h-full object-contain shadow-sm" />
             </div>
             <h1 className="text-sm font-black tracking-[0.2em] text-white uppercase">
               {isViewerMode ? 'Report Viewer' : 'WebLens'}

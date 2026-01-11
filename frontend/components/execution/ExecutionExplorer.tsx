@@ -181,51 +181,20 @@ export const ExecutionExplorer: React.FC<Props> = ({
         ) : (
             <div className="h-full w-full flex flex-col items-center justify-center select-none p-10 text-center relative overflow-hidden group">
                 {/* Visual Anchor */}
-                <div className="relative mb-8">
-                    <div className="w-20 h-20 rounded-2xl bg-zinc-900 border border-white/5 flex items-center justify-center shadow-sm">
-                        <Terminal className="w-8 h-8 text-zinc-600" strokeWidth={1} />
+                <div className="relative mb-12 opacity-30 grayscale">
+                    <div className="w-32 h-32 flex items-center justify-center overflow-hidden p-6">
+                        <img src="/logo-no-bg.png" alt="WebLens" className="w-full h-full object-contain" />
                     </div>
                 </div>
 
                 {/* Content */}
-                <div className="relative space-y-4 max-w-sm">
-                    <div className="space-y-1">
-                        <h3 className="text-[14px] font-black uppercase tracking-[0.4em] text-zinc-400">
-                            Execution Explorer
-                        </h3>
-                        <div className="flex items-center justify-center gap-2">
-                             <div className="h-[1px] w-4 bg-zinc-800" />
-                             <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest">System In Idle State</span>
-                             <div className="h-[1px] w-4 bg-zinc-800" />
-                        </div>
-                    </div>
-                    
-                    <p className="text-[11px] text-zinc-700 leading-relaxed font-medium uppercase tracking-tight">
-                        Launch a test flow to capture high-fidelity traces, 
-                        automated insights, and multi-stage screenshots. 
-                        Select a record from the history sidebar to begin analysis.
+                <div className="relative space-y-2 max-w-sm opacity-40 grayscale">
+                    <h3 className="text-[16px] font-black uppercase tracking-[0.4em] text-zinc-400">
+                        Execution Explorer
+                    </h3>
+                    <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-[0.2em]">
+                        Select a record to begin analysis
                     </p>
-                    
-                    <div className="pt-6 flex flex-wrap items-center justify-center gap-6 opacity-30 grayscale">
-                         <div className="flex items-center gap-1.5">
-                            <div className="w-1 h-1 rounded-full bg-zinc-600" />
-                            <span className="text-[8px] font-black tracking-widest uppercase text-zinc-600">Trace Logs</span>
-                         </div>
-                         <div className="flex items-center gap-1.5">
-                            <div className="w-1 h-1 rounded-full bg-zinc-600" />
-                            <span className="text-[8px] font-black tracking-widest uppercase text-zinc-600">AI Analysis</span>
-                         </div>
-                         <div className="flex items-center gap-1.5">
-                            <div className="w-1 h-1 rounded-full bg-zinc-600" />
-                            <span className="text-[8px] font-black tracking-widest uppercase text-zinc-600">Snapshots</span>
-                         </div>
-                    </div>
-                </div>
-
-                {/* Bottom Border/Label */}
-                <div className="absolute bottom-8 left-8 right-8 flex items-center justify-between pointer-events-none opacity-20">
-                    <div className="text-[7px] font-mono text-zinc-500 uppercase tracking-tighter">BUILD_V1.4.2</div>
-                    <div className="text-[7px] font-mono text-zinc-500 uppercase tracking-tighter">STDBY_MODE</div>
                 </div>
             </div>
         )}

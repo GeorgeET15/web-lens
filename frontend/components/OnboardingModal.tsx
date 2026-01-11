@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Rocket, FileText, BookTemplate } from 'lucide-react';
+import { FileText, BookTemplate } from 'lucide-react';
 import { SAMPLE_FLOWS } from '../config/samples';
 import { FlowGraph } from '../types/flow';
 
@@ -44,16 +44,16 @@ export function OnboardingModal({ onDismiss, onLoadFlow, forceOpen }: Onboarding
             {/* Gradient accent border */}
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500/60 via-purple-500/40 to-pink-500/60" />
             
-            <div className="space-y-6 relative z-10">
+            <div className="space-y-6 relative z-10 flex flex-col items-center text-center">
                 {/* Icon with gradient background */}
-                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center shadow-lg border border-indigo-500/30">
-                    <Rocket className="text-indigo-300 w-7 h-7" />
+                <div className="w-32 h-32 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shadow-inner overflow-hidden p-4 group-hover:border-indigo-500/30 transition-colors duration-500">
+                    <img src="/logo-no-bg.png" alt="WebLens" className="w-full h-full object-contain" />
                 </div>
                 <div>
                     <h2 className="text-2xl font-black text-white tracking-tight mb-3 uppercase">
                         Welcome to<br/>Zero-Code Testing
                     </h2>
-                    <p className="text-[11px] text-zinc-400 leading-relaxed font-medium">
+                    <p className="text-[11px] text-zinc-400 leading-relaxed font-medium max-w-[200px]">
                         Build robust web automation flows without writing a single line of code.
                     </p>
                 </div>

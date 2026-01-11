@@ -1200,7 +1200,7 @@ const [dialogConfig, setDialogConfig] = useState<{
                 <div>
                   <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 cursor-default select-none">Core</h2>
                   <div className="grid gap-2">
-                    {(['ai_prompt', 'open_page', 'delay', 'refresh_page', 'wait_for_page_load'] as BlockType[])
+                    {(['open_page', 'delay', 'refresh_page', 'wait_for_page_load'] as BlockType[])
                       .filter(type => DEFAULT_BLOCKS[type].label.toLowerCase().includes(blockSearchQuery.toLowerCase()))
                       .map(type => (
                       <button

@@ -15,7 +15,7 @@ if sys.platform == 'darwin':
 elif sys.platform == 'win32':
     icon_file = 'assets/icon.ico'
 else:
-    icon_file = None
+    icon_file = 'assets/logo.png'
 
 a = Analysis(
     ['launcher.py'],
@@ -69,6 +69,12 @@ a = Analysis(
         'requests',
         'fastapi.staticfiles',
         'jinja2',
+        
+        # PIL / Pillow
+        'PIL',
+        'PIL.Image',
+        'PIL.ImageChops',
+        'PIL.ImageStat',
     ],
     hookspath=[],
     hooksconfig={},
@@ -80,7 +86,6 @@ a = Analysis(
         'numpy',
         'pandas',
         'scipy',
-        'PIL',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

@@ -74,8 +74,19 @@ def open_browser_as_app(url: str) -> bool:
         path = shutil.which(browser)
         if path:
             try:
-                # Launch in background without blocking
-                subprocess.Popen([path, f"--app={url}"], start_new_session=True)
+                # Launch in standalone app mode with custom branding
+                # Note: Not using --user-data-dir to preserve user's existing login sessions
+                subprocess.Popen([
+                    path,
+                    f"--app={url}",
+                    "--class=WebLens",  # Custom window class (Linux)
+                    "--name=WebLens",   # Custom window name
+                    "--start-maximized",
+                    "--window-size=1920,1080",
+                    "--disable-features=MediaRouter",  # Disable cast
+                    "--no-first-run",
+                    "--no-default-browser-check"
+                ], start_new_session=True)
                 return True
             except Exception:
                 continue
