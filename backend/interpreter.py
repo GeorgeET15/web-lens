@@ -758,7 +758,7 @@ class BlockInterpreter:
     def _execute_block(self, block_id: Optional[str], flow: FlowGraph) -> None:
         """Execute a single block and follow to next block."""
         if block_id is None:
-            self.context.log(" Reached end of flow")
+            print("--- Reached end of flow", flush=True)
             return
         
         block = flow.get_block_by_id(block_id)
@@ -927,10 +927,10 @@ class BlockInterpreter:
         # Continue to next block
         next_id = block.next_block
         if next_id:
-            self.context.log(f"DEBUG: Transitioning from {block_id} -> {next_id}")
+            print(f"DEBUG: Transitioning from {block_id} -> {next_id}", flush=True)
             self._execute_block(next_id, flow)
         else:
-            self.context.log(f"DEBUG: Block {block_id} has no next_block. Flow complete.")
+            print(f"DEBUG: Block {block_id} has no next_block. Flow complete.", flush=True)
     
     def _execute_open_page(self, block: OpenPageBlock) -> None:
         """Execute the Open Page block."""

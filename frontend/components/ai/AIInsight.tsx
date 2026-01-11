@@ -32,8 +32,8 @@ export const AIInsight: React.FC<AIInsightProps> = ({
   return (
     <div className={cn(
       "rounded-lg border border-dashed transition-all duration-300 overflow-hidden",
-      type === 'failure' && "bg-purple-50/50 border-purple-200/40 dark:bg-zinc-900/50 dark:border-purple-800/30",
-      type === 'inspection' && "bg-blue-50/50 border-blue-200/40 dark:bg-zinc-900/50 dark:border-indigo-500/10",
+      type === 'failure' && "bg-rose-500/5 border-rose-500/20 dark:bg-zinc-900/50 dark:border-rose-500/20",
+      type === 'inspection' && "bg-indigo-500/5 border-indigo-500/20 dark:bg-zinc-900/50 dark:border-indigo-500/20",
       type === 'stability' && "bg-emerald-500/5 border-emerald-500/20 dark:bg-zinc-900/50 dark:border-emerald-500/10",
       className
     )}>
@@ -48,7 +48,7 @@ export const AIInsight: React.FC<AIInsightProps> = ({
         >
           <div className={cn(
             "p-1.5 rounded-md",
-            type === 'failure' && "bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-300",
+            type === 'failure' && "bg-rose-500/10 text-rose-400",
             type === 'inspection' && "bg-indigo-500/10 text-indigo-400",
             type === 'stability' && "bg-emerald-500/20 text-emerald-400"
           )}>

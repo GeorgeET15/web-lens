@@ -26,24 +26,36 @@ class AIService:
         """
         return await self.provider.generate_multimodal(prompt, [baseline_b64, current_b64])
 
-    async def analyze_failure(self, failure_context: Dict[str, Any]) -> str:
-        """Analyze a test failure and provide a natural language summary and guidance."""
+    async def analyze_block_execution(self, context: Dict[str, Any]) -> str:
+        """Analyze a test block execution (success or failure) and provide clean insights."""
         if not self.is_enabled():
-            return "AI Analysis is unavailable."
+            return "AI Commentary is unavailable."
             
+        is_failure = context.get("status") == "failed" or "error" in context
+        
         prompt = f"""
-        Analyze the following WebLens test failure and provide a concise, professional summary for a developer.
-        Focus on identifying the root cause and suggesting a fix.
+        You are the WebLens AI Insight generator. 
+        Analyze the following execution context for a specific test block and provide a clear, empathetic, and jargon-free explanation.
         
-        Failure Context:
-        {json.dumps(failure_context, indent=2)}
+        CONTEXT:
+        {json.dumps(context, indent=2)}
         
-        Response Format:
-        SUMMARY: <one sentence summary>
-        GUIDANCE: <one sentence fix recommendation>
+        REQUIREMENTS:
+        1. Use simple, human language. Avoid technical jargon like 'heuristic', 'semantic resolution', 'deterministic anomaly', 'DOM', or 'threshold'.
+        2. IF FAILED: Explain what went wrong from a user's perspective (e.g., 'The login button couldn't be found') and provide a simple, actionable fix.
+        3. IF SUCCESSFUL: Briefly describe what was accomplished (e.g., 'Successfully navigated to the dashboard').
+        4. Focus ONLY on this specific block's results.
+        
+        RESPONSE FORMAT:
+        SUMMARY: <A clear, non-technical explanation>
+        { "GUIDANCE: <A simple fix or next step>" if is_failure else "INSIGHT: <A helpful observation about the successful result>" }
         """
         response = await self.provider.generate_text(prompt)
         return response
+
+    async def analyze_failure(self, failure_context: Dict[str, Any]) -> str:
+        """Deprecated: Use analyze_block_execution instead. Maintained for API compatibility."""
+        return await self.analyze_block_execution(failure_context)
 
     async def propose_healing_candidate(self, target_ref: Dict[str, Any], candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
         """

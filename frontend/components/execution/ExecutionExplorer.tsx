@@ -162,7 +162,7 @@ export const ExecutionExplorer: React.FC<Props> = ({
                                         (window as any).addToast('success', 'Live share link copied!');
                                     }
                                 }}
-                                className="px-2 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded text-[8px] font-black uppercase tracking-widest text-indigo-400 hover:bg-indigo-500/20 transition-all active:scale-95 flex items-center gap-1.5"
+                                className="px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-md text-[10px] font-black uppercase tracking-widest text-indigo-400 hover:bg-indigo-500/20 transition-all active:scale-95 flex items-center gap-2"
                             >
                                 <Share2 className="w-3 h-3" />
                                 Share
