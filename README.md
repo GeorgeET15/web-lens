@@ -22,13 +22,14 @@ WebLens is a free, professional-grade visual web testing application designed to
 1. **Semantic Intent**: Interactions are defined by their accessible meaning (e.g., "Click Search"), making them resilient to layout changes.
 2. **Deterministic Execution**: Tests must run the same way every time. If a flow is incomplete, it cannot run.
 3. **Honest Failure**: WebLens does not perform "AI guessing" or hidden fallbacks. If an element cannot be found with high confidence, the test fails explicitly.
-4. **Explainability**: Every step must provide visual and logical proof of its outcome via the TAF (Trace–Analysis–Feedback) subsystem.
+4. **Explainability & Transparency**: Every step provides visual and logical proof via the TAF (Trace–Analysis–Feedback) subsystem. The **Semantic Debugger** exposes internal scoring calculations to the developer.
+5. **Active (Developer-Controlled) Healing**: While we reject hidden "auto-healing," WebLens provides **Active Healing**—a tool for developers to review UI drift and manually update test definitions with one click.
 
 ### Explicit NON-GOALS
-- **No Cloud Default**: WebLens will NOT run tests in the cloud by default or require a cloud connection for core functionality.
+- **No Cloud Default**: WebLens will NOT run tests in the cloud by default.
 - **No Manual Selectors**: Users are forbidden from entering CSS or XPath selectors.
-- **No "AI Mutation"**: We do not allow AI to automatically execute or mutate flows. AI is for commentary and drafting only.
-- **No Auto-Healing**: We reject probabilistic "auto-healing" that hides regressions. Failures are reported as factual deviations.
+- **No "AI Mutation"**: We do not allow AI to automatically execute or mutate flows.
+- **No Hidden Auto-Healing**: We reject probabilistic healing that hides regressions. All healing is intentional and logged.
 - **No Multi-Tenant Accounts**: The application is a single-user local tool.
 - **No Package-Manager Dependency**: Primary distribution is via native binaries, not `pip` or `npm` installs.
 
@@ -43,7 +44,36 @@ WebLens is a free, professional-grade visual web testing application designed to
 
 ---
 
-## SECTION 4 — BLOCK SYSTEM OVERVIEW
+## SECTION 4 — SEMANTIC DEBUGGER & ACTIVE HEALING
+
+### Semantic Debugger
+WebLens provides complete transparency into how elements are resolved on the page. The **Semantic Debugger** exposes:
+
+- **Top 5 Candidates**: See all elements that matched your semantic criteria, ranked by the Multi-Attribute Weighted Scoring (MAWS) engine.
+- **Scoring Breakdown**: View exactly how much each attribute (Name, Role, Test ID, ARIA Label, etc.) contributed to the final score.
+- **Performance Metrics**: Track resolution time and DOM complexity for each lookup.
+- **Confidence Health**: Visual indicators show when UI drift is detected (scores below 0.7 trigger warnings).
+
+**Use Cases**:
+- **Debugging Failed Lookups**: When a test fails, the debugger shows what the engine *almost* matched, helping you understand why.
+- **Optimizing Selectors**: See which semantic signals are most effective for your application.
+- **Understanding Drift**: Compare expected vs. actual attributes to diagnose UI changes.
+
+### Active Healing
+When the Semantic Debugger detects UI drift (e.g., a button's text changed from "Submit" to "Send"), **Active Healing** allows you to:
+
+1. **Review Changes**: A modal shows a side-by-side diff of expected vs. actual attributes.
+2. **Select Attributes**: Choose which semantic signals to update (Name, Role, Test ID, etc.).
+3. **Apply with One Click**: The flow definition is updated immediately, and the change is logged with an audit trail.
+
+**Key Principles**:
+- **Manual Control**: Healing is never automatic. You decide when and what to heal.
+- **Transparency**: All changes are logged with timestamps and previous confidence scores.
+- **Selective Updates**: You can choose to update only specific attributes (e.g., update the Name but keep the Role).
+
+---
+
+## SECTION 5 — BLOCK SYSTEM OVERVIEW
 
 WebLens implements a library of immutable logic blocks, ensuring comprehensive coverage of web automation without technical hacks.
 
@@ -55,7 +85,7 @@ WebLens implements a library of immutable logic blocks, ensuring comprehensive c
 
 ---
 
-## SECTION 5 — DISTRIBUTION & UPDATES
+## SECTION 6 — DISTRIBUTION & UPDATES
 
 ### Distribution
 WebLens is distributed exclusively via **GitHub Releases** as native installers/packages. 
@@ -67,7 +97,7 @@ WebLens follows a manual update model. Users choose when to upgrade by downloadi
 
 ---
 
-## SECTION 6 — LICENSE & LEGAL
+## SECTION 7 — LICENSE & LEGAL
 
 WebLens is licensed under a proprietary agreement. 
 - **Permitted**: Free use for any purpose (Personal, Commercial, Academic).

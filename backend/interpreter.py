@@ -68,6 +68,7 @@ class InterpreterContext:
         self.current_evidence: Optional[Any] = None
         self.current_block_score: Optional[float] = None
         self.current_block_actuals: Optional[Dict[str, Any]] = None
+        self.current_block_expected: Optional[Dict[str, Any]] = None
         self.current_block_candidates: List[Dict[str, Any]] = []
         
         # Execution Insight Report
@@ -297,6 +298,7 @@ class BlockInterpreter:
                 if hasattr(self, 'context'):
                     self.context.current_block_score = score
                     self.context.current_block_actuals = actuals
+                    self.context.current_block_expected = target_ref.model_dump()
                     self.context.current_block_candidates = candidates
                 
                 return handle
@@ -329,6 +331,7 @@ class BlockInterpreter:
                     if hasattr(self, 'context'):
                         self.context.current_block_score = final_score
                         self.context.current_block_actuals = actuals
+                        self.context.current_block_expected = target_ref.model_dump()
                         self.context.current_block_candidates = candidates
 
                     # TRIGGER HUD FOR RETRY-PATH
@@ -766,6 +769,7 @@ class BlockInterpreter:
         self.context.flush_taf()
         self.context.current_block_score = None
         self.context.current_block_actuals = None
+        self.context.current_block_expected = None
         self.context.current_block_candidates = []
         
         try:
@@ -875,6 +879,7 @@ class BlockInterpreter:
                 taf=taf_bundle,
                 screenshot=screenshot,
                 confidence_score=self.context.current_block_score,
+                expected_attributes=self.context.current_block_expected,
                 actual_attributes=self.context.current_block_actuals,
                 semantic_candidates=getattr(self.context, 'current_block_candidates', []),
                 tier_2_evidence=evidence

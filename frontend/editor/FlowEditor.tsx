@@ -45,6 +45,8 @@ export interface FlowEditorRef {
   clearHighlighting: () => void;
   scrollToBlock: (blockId: string) => void;
   createNewFlow: () => void;
+  exportFlow: () => void;
+  triggerImport: () => void;
 }
 
 export const LAYOUT_CONSTANTS = {
@@ -395,6 +397,12 @@ const [dialogConfig, setDialogConfig] = useState<{
         },
         createNewFlow: () => {
             resetToNewFlow();
+        },
+        exportFlow: () => {
+            handleExport();
+        },
+        triggerImport: () => {
+            document.getElementById('import-file-input')?.click();
         }
     }));
 
@@ -857,6 +865,79 @@ const [dialogConfig, setDialogConfig] = useState<{
          handleLoadFlow(flow as any, true);
     };
 
+    const handleExport = async () => {
+        setIsProcessing(true);
+        setProcessingMessage('Exporting Flow...');
+        
+        try {
+            // Generate flow from current state
+            const flow = FlowTransformer.toCanonical(
+                flowName,
+                blocks,
+                globalVariables,
+                scenarioSets,
+                1,
+                currentFlowId || undefined,
+                flowDescription
+            );
+
+            // Encode to .weblens format
+            const { encodeWeblens, downloadWeblens } = await import('../utils/weblensFormat');
+            const weblensContent = await encodeWeblens(flow, flowName, flowDescription);
+            // Trigger download
+            const safeFilename = flowName.replace(/[^a-zA-Z0-9_-]/g, '_');
+            downloadWeblens(weblensContent, safeFilename);
+
+            if ((window as any).addToast) {
+                (window as any).addToast('success', `Flow exported as ${safeFilename}.weblens`);
+            }
+        } catch (e) {
+            console.error(e);
+            if ((window as any).addToast) {
+                (window as any).addToast('error', 'Failed to export flow');
+            }
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        
+        setIsProcessing(true);
+        setProcessingMessage('Importing Flow...');
+        
+        try {
+            if (!file.name.endsWith('.weblens')) {
+                throw new Error('Please select a .weblens file');
+            }
+
+            // Read file content
+            const content = await file.text();
+
+            // Decode .weblens format
+            const { decodeWeblens } = await import('../utils/weblensFormat');
+            const { metadata, flow } = await decodeWeblens(content);
+
+            // Load the imported flow
+            performLoad(flow, crypto.randomUUID(), false);
+            
+            if ((window as any).addToast) {
+                (window as any).addToast('success', `Imported: ${metadata.flow_name}`);
+            }
+        } catch (e: any) {
+            console.error(e);
+            if ((window as any).addToast) {
+                (window as any).addToast('error', e.message || 'Failed to import flow');
+            }
+        } finally {
+            setIsProcessing(false);
+            // Reset file input
+            event.target.value = '';
+        }
+    };
+
     const resetToNewFlow = (withConfirmation = true) => {
         const performReset = () => {
             setBlocks([{ id: `block_${crypto.randomUUID()}`, ...DEFAULT_BLOCKS.open_page }]);
@@ -1273,6 +1354,13 @@ const [dialogConfig, setDialogConfig] = useState<{
                          <FolderOpen className="w-3.5 h-3.5" />
                          Load
                       </button>
+                      <input 
+                         id="import-file-input"
+                         type="file"
+                         accept=".weblens"
+                         style={{ display: 'none' }}
+                         onChange={handleImport}
+                      />
                       <button 
                          onClick={handleDeleteCurrent}
                          className={`flex items-center justify-center gap-2 col-span-2 py-2 rounded-md text-[10px] font-black uppercase tracking-[0.2em] transition-all border active:scale-95 ${

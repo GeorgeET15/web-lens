@@ -85,47 +85,66 @@ function findSemantic(ref) {
                 if (style.display === 'none' || style.visibility === 'hidden') continue;
             }
 
-            var score = 0;
-            
-            // 1. Test-ID Match (Highest Priority)
-            const elTestId = el.getAttribute('data-testid') || el.getAttribute('data-test-id') || el.getAttribute('data-cy') || el.getAttribute('data-qa');
-            if (targetTestId && elTestId === targetTestId) score += 15;
+            // 1. Role Match
+            let roleScore = 0;
+            const elRole = getRole(el);
+            if (targetRole && targetRole !== 'any' && elRole === targetRole) roleScore = 5;
 
-            // 2. Name Match (Semantic Anchor) - FUZZY BIDIRECTIONAL
+            // 2. Name Match
+            let nameScore = 0;
             const elName = getName(el);
-            if (targetName && elName) {
-                if (elName === targetName) score += 12;
-                else if (elName.includes(targetName) || targetName.includes(elName)) {
-                    score += 8;
+            if (targetName) {
+                if (elName === targetName) {
+                    nameScore = 15;
+                } else if (elName.includes(targetName) || targetName.includes(elName)) {
+                    nameScore = 8;
                 } else {
-                    // Word-by-word intersection for extreme cases
                     const targetWords = targetName.split(/\s+/).filter(w => w.length > 2);
                     const elWords = elName.split(/\s+/).filter(w => w.length > 2);
                     const intersection = targetWords.filter(w => elWords.includes(w));
-                    if (intersection.length > 0) score += (intersection.length * 4);
+                    if (intersection.length > 0) nameScore = (intersection.length * 4);
                 }
             }
 
             // 3. ARIA Label Match
+            let ariaScore = 0;
             const elAria = el.getAttribute('aria-label');
-            if (targetAriaLabel && elAria === targetAriaLabel) score += 8;
+            if (targetAriaLabel && elAria === targetAriaLabel) ariaScore = 8;
 
-            // 4. Role Match
-            const elRole = getRole(el);
-            if (targetRole && targetRole !== 'any' && elRole === targetRole) score += 5;
+            // 4. Test ID (data-testid, etc)
+            let testIdScore = 0;
+            const elTestId = el.getAttribute('data-testid') || el.getAttribute('data-test-id') || el.id;
+            if (targetTestId && elTestId === targetTestId) testIdScore = 20;
 
             // 5. Placeholder / Title Match
+            let placeholderScore = 0;
             const elPlaceholder = el.getAttribute('placeholder');
-            if (targetPlaceholder && elPlaceholder === targetPlaceholder) score += 3;
+            if (targetPlaceholder && elPlaceholder === targetPlaceholder) placeholderScore = 3;
             
+            let titleScore = 0;
             const elTitle = el.title || el.getAttribute('title');
-            if (targetTitle && elTitle === targetTitle) score += 3;
+            if (targetTitle && elTitle === targetTitle) titleScore = 3;
 
             // 6. Tag Match (Tie-breaker)
-            if (targetTagName && el.tagName.toLowerCase() === targetTagName) score += 1;
+            let tagScore = 0;
+            if (targetTagName && el.tagName.toLowerCase() === targetTagName) tagScore = 1;
+
+            const score = roleScore + nameScore + ariaScore + testIdScore + placeholderScore + titleScore + tagScore;
 
             if (score > 5) { // Confidence threshold
-                candidates.push({el: el, score: score});
+                candidates.push({
+                    el: el, 
+                    score: score,
+                    breakdown: {
+                        role: roleScore,
+                        name: nameScore,
+                        aria: ariaScore,
+                        testId: testIdScore,
+                        placeholder: placeholderScore,
+                        title: titleScore,
+                        tagName: tagScore
+                    }
+                });
             }
 
             // Recurse into Shadow DOM
@@ -135,6 +154,7 @@ function findSemantic(ref) {
         }
     }
     
+    const startTime = performance.now();
     search(document);
 
     // 7. Proximity Bonus (Phase 2)
@@ -177,12 +197,17 @@ function findSemantic(ref) {
             placeholder: cand.el.getAttribute('placeholder'),
             title: cand.el.title || cand.el.getAttribute('title'),
             tagName: cand.el.tagName.toLowerCase()
-        }
+        },
+        breakdown: cand.breakdown
     }));
 
     return { 
         candidates: topCandidates,
-        best: topCandidates[0] || null
+        best: topCandidates[0] || null,
+        performance: {
+            resolution_ms: performance.now() - startTime,
+            element_count: document.querySelectorAll('*').length
+        }
     };
 }
 return findSemantic(arguments[0]);
@@ -371,6 +396,12 @@ class ElementResolver:
                 # Normalize score: Assume 20+ is "Healthy High" (1.0), Scale 5-20
                 raw_score = best.get('score', 0)
                 norm_score = min(1.0, raw_score / 20.0) if raw_score > 0 else 0
+                
+                # Capture performance metrics if available
+                perf = result.get('performance', {})
+                if perf and hasattr(engine, 'context') and engine.context:
+                    engine.context.emit_taf("trace", f"Semantic Resolution Metrics: {perf.get('resolution_ms', 0):.2f}ms for {perf.get('element_count', 0)} elements")
+
                 return best['element'], norm_score, best.get('actuals'), candidates
         except Exception as e:
             # Check if it's a browser error or just not found

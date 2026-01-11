@@ -879,6 +879,7 @@ class BlockExecution(BaseModel):
     screenshot: Optional[str] = None
     message: Optional[str] = None
     confidence_score: Optional[float] = None
+    expected_attributes: Optional[Dict[str, Any]] = None
     actual_attributes: Optional[Dict[str, Any]] = None
     semantic_candidates: List[Dict[str, Any]] = Field(default_factory=list)
     tier_2_evidence: Optional[Any] = None

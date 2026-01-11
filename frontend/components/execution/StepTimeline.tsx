@@ -1,4 +1,6 @@
 import React from 'react';
+// Force rebuild
+
 import { BlockExecution } from '../../types/execution';
 import { Loader2 } from 'lucide-react';
 
@@ -21,11 +23,7 @@ export const StepTimeline: React.FC<Props> = ({ blocks, selectedId, onSelect }) 
   }, [selectedId]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="p-4 border-b border-zinc-800 sticky top-0 bg-black z-10 flex items-center justify-between">
-        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Execution Log</h3>
-        <span className="text-[9px] text-zinc-600 font-mono">Evidence: {blocks.length}</span>
-      </div>
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-hide pb-20">
         {blocks.map((block, index) => (
           <button

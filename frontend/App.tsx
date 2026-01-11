@@ -16,10 +16,13 @@ import { Environment } from './types/environment';
 import { EnvironmentManager } from './components/EnvironmentManager';
 import { ToastContainer, type ToastType } from './components/Toast';
 import { CustomDropdown } from './components/CustomDropdown';
+import { FlowMenu } from './components/FlowMenu';
 import { clsx } from 'clsx';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Settings from './pages/Settings';
+import { MobileRestricted } from './components/MobileRestricted';
+
 
 function Dashboard() {
   const { session } = useAuth();
@@ -451,38 +454,8 @@ function Dashboard() {
           <div className="flex items-center gap-4">
             {!isViewerMode && (
               <>
-                {/* Environment Selection */}
-                <CustomDropdown 
-                  options={[
-                    { value: '', label: 'Local Browser' },
-                    ...environments.map(env => ({ value: env.id, label: env.name }))
-                  ]}
-                  value={selectedEnvironmentId}
-                  onChange={setSelectedEnvironmentId}
-                  icon={<Globe className="w-3.5 h-3.5" />}
-                />
-                
-                <button 
-                  onClick={() => setIsEnvManagerOpen(true)}
-                  className="p-2 bg-white/5 border border-white/5 rounded-lg text-zinc-600 hover:text-white hover:border-white/20 transition-all"
-                  title="Manage Environments"
-                >
-                  <Settings2 className="w-3.5 h-3.5" />
-                </button>
-
-                {/* Profile / Settings Button */}
-                <button 
-                  onClick={() => setView('settings')}
-                  className={`p-2 border rounded-lg transition-all ${view === 'settings' ? 'bg-white text-black border-white' : 'bg-white/5 border-white/5 text-zinc-600 hover:text-white hover:border-white/20'}`}
-                  title="Profile & Settings"
-                >
-                  <User className="w-3.5 h-3.5" />
-                </button>
-
-                <div className="h-6 w-[1px] bg-white/10" />
-
-                {/* Library / Status / Actions */}
-                <div className="flex items-center gap-3">
+                {/* File / Management Group */}
+                <div className="flex items-center gap-2">
                   <button 
                     onClick={() => setShowOnboarding(true)}
                     className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-zinc-900 border border-white/10 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all active:scale-95 group shadow-lg"
@@ -500,7 +473,40 @@ function Dashboard() {
                     <Plus className="w-3.5 h-3.5" />
                     <span className="text-[10px] font-black uppercase tracking-wider">New Flow</span>
                   </button>
-                  
+
+                  <FlowMenu 
+                    onExport={() => blockEditorRef.current?.exportFlow()}
+                    onImport={() => blockEditorRef.current?.triggerImport()}
+                  />
+                </div>
+
+                <div className="h-6 w-[1px] bg-white/10" />
+
+                {/* Environment Group */}
+                <div className="flex items-center gap-2">
+                    <CustomDropdown 
+                      options={[
+                        { value: '', label: 'Local Browser' },
+                        ...environments.map(env => ({ value: env.id, label: env.name }))
+                      ]}
+                      value={selectedEnvironmentId}
+                      onChange={setSelectedEnvironmentId}
+                      icon={<Globe className="w-3.5 h-3.5" />}
+                    />
+                    
+                    <button 
+                      onClick={() => setIsEnvManagerOpen(true)}
+                      className="p-2 bg-white/5 border border-white/5 rounded-lg text-zinc-600 hover:text-white hover:border-white/20 transition-all"
+                      title="Manage Environments"
+                    >
+                      <Settings2 className="w-3.5 h-3.5" />
+                    </button>
+                </div>
+
+                <div className="h-6 w-[1px] bg-white/10" />
+
+                {/* Execution Group */}
+                <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-800 bg-zinc-900 shadow-inner w-[140px]">
                     <div className={`w-1.5 h-1.5 rounded-full flex-none ${isRunning ? 'bg-white animate-pulse' : 'bg-zinc-600'}`} />
                     <span className="text-[10px] font-black uppercase tracking-[0.1em] text-zinc-400 truncate">
@@ -537,6 +543,17 @@ function Dashboard() {
                     </button>
                   )}
                 </div>
+
+                <div className="h-6 w-[1px] bg-white/10" />
+
+                {/* Profile Group */}
+                <button 
+                  onClick={() => setView('settings')}
+                  className={`p-2 border rounded-lg transition-all ${view === 'settings' ? 'bg-white text-black border-white' : 'bg-white/5 border-white/5 text-zinc-600 hover:text-white hover:border-white/20'}`}
+                  title="Profile & Settings"
+                >
+                  <User className="w-3.5 h-3.5" />
+                </button>
               </>
             )}
             
@@ -753,7 +770,24 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
 }
 
+
 export default function App() {
+    const [isMobile, setIsMobile] = useState(false);
+
+    useEffect(() => {
+        const checkMobile = () => {
+            setIsMobile(window.innerWidth < 1024); // Tablet/Mobile check (iPad Mini is ~768px, generic tablet ~1024px)
+        };
+        
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
+
+    if (isMobile) {
+        return <MobileRestricted />;
+    }
+
     return (
         <AuthProvider>
             <AuthGuard>

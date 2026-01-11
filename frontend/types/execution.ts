@@ -16,6 +16,7 @@ export interface BlockExecution {
   screenshot?: string;
   message?: string;
   confidence_score?: number;
+  expected_attributes?: Record<string, any>;
   actual_attributes?: Record<string, any>;
   semantic_candidates?: any[];
   tier_2_evidence?: any;

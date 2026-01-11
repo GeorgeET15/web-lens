@@ -78,7 +78,7 @@ export const ExecutionExplorer: React.FC<Props> = ({
                <>
                 <div className="flex items-center gap-2">
                     <Terminal className="w-4 h-4 text-zinc-500" />
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">History</span>
+                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">History</span>
                 </div>
                 <div className="flex items-center gap-1">
                     <button 
@@ -120,8 +120,8 @@ export const ExecutionExplorer: React.FC<Props> = ({
         {activeReport ? (
             <div className="flex-1 flex h-full overflow-hidden animate-in fade-in duration-300">
                 {/* Timeline */}
-                <div className="w-1/4 min-w-[260px] max-w-[320px] border-r border-zinc-900 overflow-y-auto scrollbar-hide bg-zinc-950/30">
-                    <div className="h-12 border-b border-zinc-900 bg-black/20 flex items-center justify-between px-4"> {/* h-12 to match sidebar */ }
+                <div className="w-1/4 min-w-[260px] max-w-[320px] border-r border-zinc-900 overflow-hidden flex flex-col bg-zinc-950/30">
+                    <div className="h-12 border-b border-zinc-900 bg-black/20 flex-none flex items-center justify-between px-4"> {/* h-12 to match sidebar */ }
                         <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500">Execution Log</span>
                         <span className="px-1.5 py-0.5 rounded-full bg-zinc-900 text-[8px] font-bold text-zinc-400 border border-white/5">
                             {activeReport.blocks.length} STEPS

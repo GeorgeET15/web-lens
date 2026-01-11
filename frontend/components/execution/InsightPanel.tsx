@@ -5,6 +5,7 @@ import { AIInsight } from '../ai/AIInsight';
 import { AIDisclaimer } from '../ai/AIDisclaimer';
 import { cn } from '../../lib/utils';
 import { API_ENDPOINTS } from '../../config/api';
+import { HealingPreviewModal } from './HealingPreviewModal';
 
 interface Props {
   block?: BlockExecution;
@@ -24,6 +25,7 @@ const InsightPanelDetail: React.FC<Props> = ({ block, flowId, error }) => {
   const [copied, setCopied] = useState(false);
   const [isHealing, setIsHealing] = useState(false);
   const [healingSuccess, setHealingSuccess] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   // Fetch AI Summary on Failure
   useEffect(() => {
@@ -159,40 +161,7 @@ const InsightPanelDetail: React.FC<Props> = ({ block, flowId, error }) => {
                   Confidence dip detected. This step is still working, but the UI has drifted from the original reference.
                 </p>
                 <button 
-                  onClick={async () => {
-                    setIsHealing(true);
-                    try {
-                      if (!flowId) {
-                        if ((window as any).addToast) (window as any).addToast('error', 'Flow context missing. Cannot heal.');
-                        return;
-                      }
-
-                      if ((window as any).addToast) (window as any).addToast('info', 'Executing Self-Healing sequence...');
-                      
-                      const response = await fetch(`${API_ENDPOINTS.FLOWS}/${flowId}/heal-step`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          run_id: block.run_id,
-                          block_id: block.block_id
-                        })
-                      });
-
-                      if (response.ok) {
-                        setHealingSuccess(true);
-                        if ((window as any).addToast) (window as any).addToast('success', 'Step Healed! Semantic metadata updated.');
-                        setTimeout(() => setHealingSuccess(false), 3000);
-                      } else {
-                        const err = await response.json();
-                        if ((window as any).addToast) (window as any).addToast('error', `Healing failed: ${err.detail || 'Unknown error'}`);
-                      }
-                    } catch (e) {
-                      console.error("Healing failed", e);
-                      if ((window as any).addToast) (window as any).addToast('error', 'Healing failed. Check console.');
-                    } finally {
-                      setIsHealing(false);
-                    }
-                  }}
+                  onClick={() => setIsPreviewOpen(true)}
                   className={cn(
                     "flex items-center justify-center gap-2 w-full py-1.5 border rounded text-[9px] font-black uppercase tracking-widest transition-all active:scale-95",
                     healingSuccess 
@@ -338,72 +307,111 @@ const InsightPanelDetail: React.FC<Props> = ({ block, flowId, error }) => {
                    </div>
                 )}
                 
-                {/* Semantic Candidates Debugger */}
-                {block.semantic_candidates && block.semantic_candidates.length > 0 && (
-                   <div className="space-y-3">
-                       <div className="flex items-center justify-between opacity-40">
-                           <div className="flex items-center gap-2">
-                               <Target className="w-3 h-3 text-zinc-400" />
-                               <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Semantic Resolution Candidates</span>
-                           </div>
-                           <span className="text-[8px] font-mono text-zinc-600">MAWS_INTERNAL v1.0</span>
-                       </div>
-                       <div className="space-y-2">
-                           {block.semantic_candidates.map((cand, idx) => (
-                               <div 
-                                   key={idx} 
-                                   className={cn(
-                                       "p-3 rounded-lg border text-[11px] transition-all",
-                                       idx === 0 
-                                           ? "bg-emerald-500/5 border-emerald-500/20 ring-1 ring-emerald-500/10" 
-                                           : "bg-zinc-950/50 border-white/5 opacity-60 hover:opacity-100"
-                                   )}
-                               >
-                                   <div className="flex items-center justify-between mb-2">
-                                       <div className="flex items-center gap-2">
-                                           <span className={cn(
-                                               "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter",
-                                               idx === 0 ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-800 text-zinc-500"
-                                           )}>
-                                               {idx === 0 ? 'WINNER' : `CANDIDATE_${idx + 1}`}
-                                           </span>
-                                           <span className="font-mono text-zinc-400">{cand.actuals?.tagName || 'el'}</span>
-                                       </div>
-                                       <div className="flex items-center gap-1.5">
-                                           <div className="w-12 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                                               <div 
-                                                   className={cn("h-full", idx === 0 ? "bg-emerald-500" : "bg-zinc-600")} 
-                                                   style={{ width: `${Math.min(100, (cand.score / 20) * 100)}%` }} 
-                                               />
-                                           </div>
-                                           <span className="text-[10px] font-bold text-zinc-300">{cand.score.toFixed(1)}</span>
-                                       </div>
-                                   </div>
-                                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 opacity-80">
-                                       {cand.actuals?.name && (
-                                           <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                                               <span className="text-[9px] text-zinc-500 uppercase">Name</span>
-                                               <span className="text-zinc-300 truncate max-w-[100px]">{cand.actuals.name}</span>
-                                           </div>
-                                       )}
-                                       {cand.actuals?.role && (
-                                           <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                                               <span className="text-[9px] text-zinc-500 uppercase">Role</span>
-                                               <span className="text-zinc-300">{cand.actuals.role}</span>
-                                           </div>
-                                       )}
-                                       {cand.actuals?.testId && (
-                                           <div className="flex justify-between items-center py-0.5 border-b border-white/5">
-                                               <span className="text-[9px] text-indigo-400 uppercase">Test ID</span>
-                                               <span className="text-indigo-300 truncate max-w-[100px]">{cand.actuals.testId}</span>
-                                           </div>
-                                       )}
-                                   </div>
-                               </div>
-                           ))}
-                       </div>
+                {/* SEMANTIC CANDIDATES (DEBUGGER) */}
+                <div className="flex-none pt-4 border-t border-zinc-900 border-dashed">
+                   <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                          <Brain className="w-3.5 h-3.5 text-zinc-500" />
+                          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Semantic Resolution Candidates</h4>
+                      </div>
+                      {block.taf.trace.some(t => t.includes("Metrics")) && (
+                        <span className="text-[8px] font-mono text-zinc-700">
+                          {block.taf.trace.find(t => t.includes("Metrics"))?.split(":")[1].trim()}
+                        </span>
+                      )}
                    </div>
-                )}
+
+                   {isFailed && block.semantic_candidates && block.semantic_candidates.length > 0 && (
+                      <div className="mb-4 p-4 rounded-2xl bg-rose-500/5 border border-rose-500/10 space-y-3">
+                          <div className="flex items-center gap-2 text-rose-400">
+                             <Target className="w-3.5 h-3.5" />
+                             <span className="text-[10px] font-black uppercase tracking-widest">Did you mean?</span>
+                          </div>
+                          <p className="text-[11px] text-rose-300/70 italic leading-relaxed pl-5">
+                              Found a <span className="font-bold text-rose-400">{block.semantic_candidates[0].actuals.role}</span> with the name 
+                              <span className="font-bold text-rose-400 italic"> "{block.semantic_candidates[0].actuals.name}"</span>. 
+                              Consider updating your block to match this.
+                          </p>
+                          <button 
+                            onClick={() => setIsPreviewOpen(true)}
+                            className="ml-5 px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[9px] font-black uppercase tracking-widest transition-all border border-rose-500/20"
+                          >
+                            Quick-Heal to This Element
+                          </button>
+                      </div>
+                   )}
+
+                   <div className="space-y-3">
+                       {block.semantic_candidates && block.semantic_candidates.length > 0 ? (
+                         block.semantic_candidates.map((cand, idx) => {
+                           const isWinner = idx === 0 && block.status === 'success';
+                           return (
+                             <div key={idx} className={cn(
+                               "group p-3 rounded-xl border transition-all",
+                               isWinner 
+                                 ? "bg-emerald-500/5 border-emerald-500/20 shadow-lg shadow-emerald-950/20 transition-all duration-300 transform" 
+                                 : "bg-zinc-950 border-white/5 opacity-60 hover:opacity-100"
+                             )}>
+                                <div className="flex items-center justify-between mb-3">
+                                   <div className="flex items-center gap-2">
+                                      <span className={cn(
+                                        "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest",
+                                        isWinner ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-800 text-zinc-500"
+                                      )}>
+                                         {cand.actuals.tagName}
+                                      </span>
+                                      {isWinner && <Check className="w-3 h-3 text-emerald-500" />}
+                                   </div>
+                                   <div className="flex items-center gap-2 leading-none">
+                                       <div className="h-1 w-20 bg-white/5 rounded-full overflow-hidden hidden group-hover:block transition-all">
+                                          <div 
+                                            className={cn("h-full transition-all duration-700", isWinner ? "bg-emerald-500" : "bg-zinc-700")}
+                                            style={{ width: `${Math.min(100, (cand.score / 25) * 100)}%` }}
+                                          />
+                                       </div>
+                                       <span className={cn(
+                                         "text-[10px] font-mono font-bold tracking-tight",
+                                         isWinner ? "text-emerald-400" : "text-zinc-600"
+                                       )}>
+                                          {cand.score.toFixed(1)}
+                                       </span>
+                                   </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-1.5 mb-3">
+                                   <div className="flex items-baseline gap-2 overflow-hidden">
+                                      <span className="text-[8px] font-black text-zinc-700 uppercase tracking-widest flex-shrink-0">Name</span>
+                                      <span className="text-[11px] text-zinc-400 font-medium truncate italic">"{cand.actuals.name}"</span>
+                                   </div>
+                                   <div className="flex items-baseline gap-2">
+                                      <span className="text-[8px] font-black text-zinc-700 uppercase tracking-widest flex-shrink-0">Role</span>
+                                      <span className="text-[11px] text-zinc-400 font-medium">{cand.actuals.role}</span>
+                                   </div>
+                                </div>
+
+                                {cand.breakdown && (
+                                  <div className="pt-3 border-t border-white/5 grid grid-cols-4 gap-2">
+                                      {Object.entries(cand.breakdown).map(([key, val]) => {
+                                          if (!(val as number)) return null;
+                                          return (
+                                              <div key={key} className="flex flex-col gap-0.5">
+                                                  <span className="text-[6.5px] font-black uppercase tracking-tighter text-zinc-600 truncate">{key}</span>
+                                                  <span className={cn("text-[8px] font-mono font-bold", isWinner ? "text-emerald-500/50" : "text-zinc-700")}>+{val as number}</span>
+                                              </div>
+                                          );
+                                      })}
+                                  </div>
+                                )}
+                             </div>
+                           );
+                         })
+                       ) : (
+                         <div className="p-4 rounded-xl border border-dashed border-zinc-800 text-center">
+                            <span className="text-[10px] text-zinc-700 italic font-medium">No candidates meet resolution threshold</span>
+                         </div>
+                       )}
+                   </div>
+                </div>
 
                 <div className="space-y-3">
                    {block.taf.analysis.map((msg, i) => (
@@ -518,6 +526,41 @@ const InsightPanelDetail: React.FC<Props> = ({ block, flowId, error }) => {
             </div>
         )}
       </div>
+
+      <HealingPreviewModal 
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        currentAttributes={block.expected_attributes || {}}
+        actualAttributes={block.actual_attributes || (block.semantic_candidates?.[0]?.actuals) || {}}
+        blockId={block.block_id}
+        onConfirm={async (attrs) => {
+            setIsPreviewOpen(false);
+            setIsHealing(true);
+            try {
+                if (!flowId) return;
+                
+                const response = await fetch(`${API_ENDPOINTS.FLOWS}/${flowId}/heal-step`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        run_id: block.run_id,
+                        block_id: block.block_id,
+                        attributes: attrs
+                    })
+                });
+
+                if (response.ok) {
+                    setHealingSuccess(true);
+                    if ((window as any).addToast) (window as any).addToast('success', 'Step Healed! Flow definition updated.');
+                    setTimeout(() => setHealingSuccess(false), 3000);
+                }
+            } catch (e) {
+                console.error("Healing failed", e);
+            } finally {
+                setIsHealing(false);
+            }
+        }}
+      />
     </div>
   );
 };

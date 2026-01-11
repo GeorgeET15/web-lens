@@ -4,7 +4,8 @@ FastAPI backend for visual web testing platform.
 Provides REST API for flow validation and execution with Real-Time Streaming (SSE).
 """
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, UploadFile, File, Form, Request
+from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, UploadFile, File, Form, Request, Depends
+from fastapi.responses import Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,6 +26,7 @@ from pathlib import Path
 from threading import Thread
 from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
+from datetime import datetime
 
 class CachedStaticFiles(StaticFiles):
     """Custom StaticFiles handler to add Cache-Control headers."""
@@ -35,6 +37,7 @@ class CachedStaticFiles(StaticFiles):
         return response
 
 import config
+from export_utils import encode_weblens, decode_weblens, validate_weblens
 
 # Load environment variables from .env file
 load_dotenv()
@@ -266,6 +269,7 @@ class InspectorStartRequest(BaseModel):
 class HealStepRequest(BaseModel):
     run_id: str
     block_id: str
+    attributes: Optional[List[str]] = None
 
 
 class DraftRequest(BaseModel):
@@ -342,17 +346,23 @@ async def heal_flow_step(
     # Update ElementRef metadata
     if 'params' in block_to_heal and 'element' in block_to_heal['params']:
         element = block_to_heal['params']['element']
+        
+        # Determine which attributes to heal
+        to_heal = request.attributes if request.attributes is not None else ['name', 'role', 'testId', 'ariaLabel', 'placeholder', 'title', 'tagName']
+        
         # Update name and role from actuals
-        element['name'] = actuals.get('name', element['name'])
-        element['role'] = actuals.get('role', element['role'])
+        if 'name' in to_heal:
+            element['name'] = actuals.get('name', element['name'])
+        if 'role' in to_heal:
+            element['role'] = actuals.get('role', element['role'])
         
         # Merge metadata (testId, ariaLabel, etc)
         if 'metadata' not in element:
             element['metadata'] = {}
             
-        # Comprehensive Healing: Capture all semantic signals
+        # Comprehensive Healing: Capture selected semantic signals
         for attr in ['testId', 'ariaLabel', 'placeholder', 'title', 'tagName']:
-            if actuals.get(attr):
+            if attr in to_heal and actuals.get(attr):
                 element['metadata'][attr] = actuals[attr]
         
         # Add audit trail
@@ -893,6 +903,225 @@ async def delete_flow(flow_id: str, user_id: Optional[str] = Depends(get_current
     except Exception as e:
         logger.error(f"Failed to delete flow: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/flows/local")
+async def save_flow_local(request: FlowExecutionRequest):
+    """Save flow to local backend storage (no auth required)."""
+    import json
+    from pathlib import Path
+    
+    try:
+        # Create flows directory if it doesn't exist
+        flows_dir = BACKEND_DIR / 'flows'
+        flows_dir.mkdir(exist_ok=True)
+        
+        # Generate or use existing flow ID
+        flow_id = request.flow.get('id') or str(uuid.uuid4())
+        flow_path = flows_dir / f'{flow_id}.json'
+        
+        # Save flow with metadata
+        flow_data = {
+            'id': flow_id,
+            'name': request.flow.get('name', 'Untitled Flow'),
+            'description': request.flow.get('description', ''),
+            'graph': request.flow,
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        
+        with open(flow_path, 'w') as f:
+            json.dump(flow_data, f, indent=2)
+        
+        logger.info(f"[LOCAL_SAVE] Saved flow {flow_id} to {flow_path}")
+        return {"id": flow_id, "message": "Flow saved locally"}
+    except Exception as e:
+        logger.error(f"[LOCAL_SAVE] Failed to save flow: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/flows/local")
+async def list_flows_local():
+    """List all locally saved flows (no auth required)."""
+    import json
+    from pathlib import Path
+    
+    try:
+        flows_dir = BACKEND_DIR / 'flows'
+        if not flows_dir.exists():
+            return []
+        
+        flows = []
+        for flow_file in flows_dir.glob('*.json'):
+            try:
+                with open(flow_file, 'r') as f:
+                    flow_data = json.load(f)
+                    flows.append({
+                        'id': flow_data.get('id', flow_file.stem),
+                        'name': flow_data.get('name', 'Untitled'),
+                        'updated_at': flow_data.get('updated_at'),
+                        'source': 'local'
+                    })
+            except Exception as e:
+                logger.warning(f"Failed to read flow {flow_file}: {e}")
+        
+        return flows
+    except Exception as e:
+        logger.error(f"Failed to list local flows: {e}")
+        return []
+
+
+@app.get("/api/flows/{flow_id}/export")
+async def export_flow(flow_id: str, user_id: Optional[str] = Depends(get_current_user)):
+    """Export flow as .weblens file."""
+    from database import db
+    
+    logger.info(f"[EXPORT] Starting export for flow_id: {flow_id}, user_id: {user_id}")
+    
+    # Try to fetch from Supabase first
+    if db.is_enabled() and user_id:
+        logger.info(f"[EXPORT] Supabase is enabled, attempting cloud lookup...")
+        try:
+            response = db.client.table("flows").select("*").eq("id", flow_id).eq("user_id", user_id).execute()
+            logger.info(f"[EXPORT] Supabase response: {len(response.data) if response.data else 0} flows found")
+            
+            if response.data and len(response.data) > 0:
+                flow_data = response.data[0]
+                logger.info(f"[EXPORT] Found flow in Supabase: {flow_data.get('name')}")
+                flow_graph = flow_data.get('graph', {})
+                
+                # Encode to .weblens format
+                weblens_content = encode_weblens(
+                    flow_graph,
+                    flow_name=flow_data.get('name'),
+                    flow_description=flow_data.get('description')
+                )
+                
+                # Generate filename
+                safe_name = flow_data.get('name', 'flow').replace(' ', '_').replace('/', '_')
+                filename = f"{safe_name}.weblens"
+                
+                logger.info(f"[EXPORT] Successfully encoded flow to .weblens: {filename}")
+                return Response(
+                    content=weblens_content,
+                    media_type="application/x-weblens",
+                    headers={
+                        "Content-Disposition": f'attachment; filename="{filename}"',
+                        "Content-Type": "application/x-weblens"
+                    }
+                )
+            else:
+                logger.warning(f"[EXPORT] Flow {flow_id} not found in Supabase for user {user_id}")
+        except Exception as e:
+            logger.error(f"[EXPORT] Failed to export flow from Supabase: {e}")
+    else:
+        logger.info(f"[EXPORT] Supabase disabled or no user_id, skipping cloud lookup")
+    
+    # If not found in cloud or cloud disabled, check local storage
+    logger.info(f"[EXPORT] Attempting local storage lookup...")
+    try:
+        import json
+        from pathlib import Path
+        
+        # Check local storage directory
+        local_storage_path = BACKEND_DIR / 'flows' / f'{flow_id}.json'
+        logger.info(f"[EXPORT] Checking path: {local_storage_path}")
+        logger.info(f"[EXPORT] Path exists: {local_storage_path.exists()}")
+        
+        if local_storage_path.exists():
+            logger.info(f"[EXPORT] Found flow in local storage, reading file...")
+            with open(local_storage_path, 'r') as f:
+                flow_data = json.load(f)
+                flow_graph = flow_data.get('graph', flow_data)  # Handle both wrapped and unwrapped formats
+                
+                logger.info(f"[EXPORT] Loaded flow: {flow_data.get('name', 'Unknown')}")
+                
+                # Encode to .weblens format
+                weblens_content = encode_weblens(
+                    flow_graph,
+                    flow_name=flow_data.get('name', 'Untitled Flow'),
+                    flow_description=flow_data.get('description', '')
+                )
+                
+                # Generate filename
+                safe_name = flow_data.get('name', 'flow').replace(' ', '_').replace('/', '_')
+                filename = f"{safe_name}.weblens"
+                
+                logger.info(f"[EXPORT] Successfully encoded flow to .weblens: {filename}")
+                return Response(
+                    content=weblens_content,
+                    media_type="application/x-weblens",
+                    headers={
+                        "Content-Disposition": f'attachment; filename="{filename}"',
+                        "Content-Type": "application/x-weblens"
+                    }
+                )
+        else:
+            logger.warning(f"[EXPORT] Flow file does not exist at {local_storage_path}")
+            # List what files DO exist
+            flows_dir = BACKEND_DIR / 'flows'
+            if flows_dir.exists():
+                existing_files = list(flows_dir.glob('*.json'))
+                logger.info(f"[EXPORT] Available flows in local storage: {[f.name for f in existing_files]}")
+            else:
+                logger.warning(f"[EXPORT] Flows directory does not exist: {flows_dir}")
+    except Exception as e:
+        logger.error(f"[EXPORT] Failed to export flow from local storage: {e}", exc_info=True)
+    
+    logger.error(f"[EXPORT] Flow {flow_id} not found in any storage location")
+    raise HTTPException(
+        status_code=404, 
+        detail=f"Flow '{flow_id}' not found. Please save the flow before exporting."
+    )
+
+
+@app.post("/api/flows/import")
+async def import_flow(file: UploadFile = File(...), user_id: Optional[str] = Depends(get_current_user)):
+    """Import .weblens file."""
+    # Validate file extension
+    if not file.filename or not file.filename.endswith('.weblens'):
+        raise HTTPException(status_code=400, detail="Invalid file type. Expected .weblens file")
+    
+    # Read file content
+    try:
+        content = await file.read()
+        content_str = content.decode('utf-8')
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read file: {str(e)}")
+    
+    # Validate and decode
+    is_valid, error_msg = validate_weblens(content_str)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=f"Invalid .weblens file: {error_msg}")
+    
+    try:
+        metadata, flow_graph = decode_weblens(content_str)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    # Save to Supabase if enabled and user is authenticated
+    from database import db
+    if db.is_enabled() and user_id:
+        try:
+            flow_id = db.save_flow(user_id, flow_graph)
+            if flow_id:
+                return {
+                    "success": True,
+                    "flow_id": flow_id,
+                    "message": "Flow imported successfully",
+                    "metadata": metadata
+                }
+        except Exception as e:
+            logger.error(f"Failed to save imported flow: {e}")
+            raise HTTPException(status_code=500, detail="Failed to save imported flow")
+    
+    # If cloud storage is disabled, return the flow data for local handling
+    return {
+        "success": True,
+        "flow_id": None,
+        "message": "Flow validated successfully (cloud storage disabled)",
+        "metadata": metadata,
+        "flow": flow_graph
+    }
 
 
 @app.get("/api/executions/{run_id}")
