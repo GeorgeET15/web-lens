@@ -6,20 +6,20 @@ export default function AiFeatures() {
   return (
     <Layout>
       <Helmet>
-        <title>WebLens Intelligence - Zero-Shot AI Testing</title>
-        <meta name="description" content="Explore WebLens Neural Core: Generative flow drafts, self-healing stability advisors, and semantic failure investigation." />
+        <title>WebLens AI Assistant - Smart Test Creation</title>
+        <meta name="description" content="WebLens AI helps you create tests faster by generating flows from plain English descriptions and analyzing test failures." />
       </Helmet>
       {/* Hero */}
       <section className="relative border-b border-border">
         <div className="container mx-auto px-6 py-20 lg:py-24 max-w-7xl">
-          <div className="tech-label text-primary mb-6">Neural_Core v2.1</div>
+          <div className="tech-label text-primary mb-6">AI Assistant</div>
           <h1 className="text-5xl lg:text-7xl font-bold tracking-tight mb-8 leading-[1.1]">
-            Zero-Shot <br />
-            <span className="italic text-primary">Intelligence.</span>
+            Build Tests Faster <br />
+            <span className="italic text-primary">With AI Help</span>
           </h1>
           <p className="text-xl text-muted-foreground max-w-xl leading-relaxed">
-            WebLens doesn't just match selectors. It understands interface semantics.
-            Digital intelligence provides deep commentary and draft structures, while leaving execution to deterministic logic.
+            Describe what you want to test in plain English, and WebLens AI creates the test flow for you. 
+            When tests fail, AI explains what went wrong and suggests fixes.
           </p>
         </div>
       </section>
@@ -50,9 +50,9 @@ export default function AiFeatures() {
                  <div className="w-10 h-10 bg-primary flex items-center justify-center border border-primary/20">
                     <Sparkles className="w-5 h-5 text-primary" />
                  </div>
-                 <h3 className="text-lg font-bold">Generative Flow Drafts</h3>
+                 <h3 className="text-lg font-bold">AI Test Generator</h3>
                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Powered by the <strong>Translator Chain</strong>. Describe your intent, and WebLens provides a <em>verifiable draft</em> of logic blocks. You review, compile, and execute.
+                    Describe what you want to test in plain English, and AI creates a complete test flow for you. Review and run it with one click.
                  </p>
               </div>
 
@@ -60,9 +60,9 @@ export default function AiFeatures() {
                  <div className="w-10 h-10 bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
                     <Network className="w-5 h-5 text-indigo-400" />
                  </div>
-                 <h3 className="text-lg font-bold">Stability Analysis</h3>
+                 <h3 className="text-lg font-bold">Reliability Insights</h3>
                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    The <strong>Stability Advisor Chain</strong> performs statistical analysis on historical runs to flag flaky patterns. It suggests architectural hardenings—it never implicitly changes runtime logic.
+                    AI analyzes your test history to spot flaky tests and suggest improvements. It recommends fixes but never changes your tests automatically.
                  </p>
               </div>
 
@@ -70,9 +70,9 @@ export default function AiFeatures() {
                  <div className="w-10 h-10 bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
                     <Brain className="w-5 h-5 text-emerald-400" />
                  </div>
-                 <h3 className="text-lg font-bold">Post-Run Investigation</h3>
+                 <h3 className="text-lg font-bold">Failure Explanations</h3>
                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    When a test fails, the <strong>Investigator Chain</strong> audits the frozen dom state to generate a semantic failure report. It identifies root causes without hallucinatory guessing.
+                    When a test fails, AI examines the page state and explains exactly what went wrong and why. Get clear, actionable insights instead of cryptic error messages.
                  </p>
               </div>
            </div>

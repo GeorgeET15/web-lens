@@ -39,28 +39,29 @@ export default function Index() {
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             {/* Left: Content */}
             <div className="flex flex-col items-start gap-8">
-              <div className="tech-label text-primary">System_Manifesto v1.0.0</div>
+              <div className="tech-label text-primary">Visual Testing Platform</div>
               
               <h1 className="text-5xl lg:text-6xl font-bold tracking-tight leading-[1.1]">
-                Visual Testing, <br />
-                <span className="text-primary italic">Deterministic</span> by Design.
+                Test Your Website, <br />
+                <span className="text-primary italic">Without Writing Code.</span>
               </h1>
               
               <p className="text-lg text-muted-foreground leading-relaxed">
-                WebLens is a free, professional-grade visual testing application that runs entirely on your local machine. 
-                No accounts, no cloud dependency, no scripting. Just semantic intent and verifiable visual evidence.
+                WebLens is a free visual testing tool that runs on your computer. 
+                Create automated tests by clicking through your website—no coding required. 
+                AI helps you build tests faster, and everything runs locally with no account needed.
               </p>
 
               <div className="flex flex-wrap gap-4 pt-2">
                 <Button size="sm" className="h-10 px-6 bg-primary hover:bg-primary/90 text-white rounded-none text-[10px] font-bold tracking-widest" asChild>
                   <Link to="/docs" className="gap-2">
-                    INIT_DEPLOYMENT
+                    Download Free
                     <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </Button>
                 <Button size="sm" variant="outline" className="h-10 px-6 border-border hover:bg-secondary rounded-none text-[10px] font-bold tracking-widest" asChild>
                   <Link to="/how-it-works">
-                    THEORY_OF_OP
+                    See How it Works
                   </Link>
                 </Button>
               </div>
@@ -68,8 +69,8 @@ export default function Index() {
               {/* Minimal Metadata Footer */}
               <div className="w-full pt-6 mt-2 border-t border-border/30 flex gap-8 opacity-30 text-[9px] font-mono">
                 <div className="flex gap-2">
-                  <span className="text-primary">ENGINE_V</span>
-                  <span>1.1.0</span>
+                  <span className="text-primary">VERSION</span>
+                  <span>1.0.0</span>
                 </div>
                 <div className="flex gap-2">
                   <span className="text-primary">STATUS</span>
@@ -103,19 +104,20 @@ export default function Index() {
         <div className="container mx-auto px-6 py-24 lg:px-12 grid lg:grid-cols-2 gap-16 items-start max-w-7xl">
           <div className="space-y-10">
             <div className="space-y-6">
-              <div className="tech-label text-failure">Explicit_Constraints</div>
-              <h2 className="text-4xl font-bold tracking-tight">Reliability through Limitation.</h2>
+              <div className="tech-label text-primary">How It Works</div>
+              <h2 className="text-4xl font-bold tracking-tight">Simple, Reliable Testing</h2>
               <p className="text-muted-foreground text-lg leading-relaxed">
-                WebLens trades the flexibility of raw scripting for the absolute reliability of semantic resolution. 
-                By forcing users to define intent rather than implementation, we create tests that survive refactors.
+                WebLens uses smart element detection instead of fragile CSS selectors. 
+                Your tests keep working even when your website's code changes.
               </p>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-8">
+            <div className="grid md:grid-cols-2 gap-8">
               {[
-                { icon: Fingerprint, title: "Semantic Capture", desc: "Elements are identified by role, name, and accessible context—not brittle CSS selectors." },
-                { icon: Shield, title: "Deterministic Loop", desc: "Polled resolution with strict timeouts ensures zero flakiness and reproducible results." },
-                { icon: Activity, title: "Trace History", desc: "Every execution generates a factual, immutable record with full evidence." }
+                { icon: Blocks, title: "Drag-and-Drop Builder", desc: "Build tests visually by placing logic blocks. No coding required—just drag, drop, and connect." },
+                { icon: Fingerprint, title: "Smart Element Finding", desc: "Finds elements by their purpose and text, not brittle CSS selectors that break easily." },
+                { icon: Shield, title: "Reliable Execution", desc: "Waits for elements to be ready before interacting, eliminating random test failures." },
+                { icon: Activity, title: "Complete History", desc: "Every test run is saved with screenshots and logs so you can see exactly what happened." }
               ].map((item) => (
                 <div key={item.title} className="space-y-3 relative group">
                   <div className="flex items-center gap-3">
@@ -132,7 +134,7 @@ export default function Index() {
           <div className="space-y-6">
             <div className="relative border border-border p-8 bg-card shadow-2xl space-y-4 overflow-hidden">
               <div className="flex justify-between items-center mb-6">
-                 <div className="tech-label opacity-50">Logical_Orchestration_Stream</div>
+                 <div className="tech-label opacity-50">Test Flow Example</div>
                  <div className="text-[8px] font-mono text-primary/40">0x7F_RENDER_SEQ</div>
               </div>
               
@@ -160,19 +162,19 @@ export default function Index() {
         <div className="container mx-auto px-6 py-24 lg:px-12 grid lg:grid-cols-2 gap-16 max-w-7xl">
           <div className="space-y-10">
             <div className="space-y-6">
-              <div className="tech-label text-investigation">TAF_Registry</div>
-              <h2 className="text-4xl font-bold tracking-tight">Honest Failure is Better than Hidden Recovery.</h2>
+              <div className="tech-label text-primary">When Tests Fail</div>
+              <h2 className="text-4xl font-bold tracking-tight">Clear Explanations, Not Guesswork</h2>
               <p className="text-muted-foreground text-lg leading-relaxed">
-                WebLens does not use "AI magic" to guess your intent or "fix" broken tests behind the scenes. 
-                Instead, the TAF system provides factual evidence for every success and clear analysis for every failure.
+                When something goes wrong, WebLens shows you exactly what happened with screenshots and detailed logs. 
+                No mysterious failures or hidden auto-fixes.
               </p>
             </div>
 
             <div className="space-y-6">
               {[
-                { label: "TRACE", icon: Terminal, color: "text-foreground", text: "Chronological log of browser events with precise timestamps and state transitions." },
-                { label: "ANALYSIS", icon: Code, color: "text-primary", text: "Logic explanation for semantic resolution failures with actionable recovery guidance." },
-                { label: "FEEDBACK", icon: AlertTriangle, color: "text-warning", text: "Platform-specific suggestions for fixing broken interactions and state mismatches." }
+                { label: "Timeline", icon: Terminal, color: "text-foreground", text: "See exactly what happened during your test, step by step with timestamps." },
+                { label: "Analysis", icon: Code, color: "text-primary", text: "Get clear explanations of why a test failed and suggestions on how to fix it." },
+                { label: "Screenshots", icon: AlertTriangle, color: "text-warning", text: "Visual proof of what the page looked like when the test failed." }
               ].map((taf) => (
                 <div key={taf.label} className="border border-border p-6 bg-card flex gap-4 transition-colors hover:bg-accent group">
                   <taf.icon className={cn("h-6 w-6 mt-0.5 shrink-0", taf.color)} />
@@ -224,20 +226,20 @@ export default function Index() {
       {/* CTA: Deterministic Future */}
       <section className="py-16 bg-secondary border-t border-border">
         <div className="container mx-auto px-6 text-center max-w-4xl space-y-6">
-          <div className="tech-label text-warning tracking-[0.4em]">SYSTEM_ACCESS</div>
-          <h2 className="text-3xl lg:text-4xl font-bold tracking-tighter leading-tight">
-            Ready to test <br />with the truth?
+          <div className="tech-label text-primary tracking-[0.3em]">Ready to Get Started?</div>
+          <h2 className="text-3xl lg:text-4xl font-bold tracking-tight leading-tight">
+            Start Testing <br />Your Website Today
           </h2>
           <p className="text-muted-foreground text-sm max-w-lg mx-auto">
-            WebLens is a free local application for all technical personnel. 
-            No accounts, no cloud dependencies. Just pure visual determinism.
+            WebLens is free and runs on your computer. 
+            No account required, no credit card, just download and start testing.
           </p>
           <div className="flex justify-center gap-4 pt-4">
             <Button size="sm" className="h-10 px-8 bg-primary hover:bg-primary/90 text-white rounded-none font-bold text-[10px] tracking-widest" asChild>
-              <Link to="/flows">ENTER_DASHBOARD</Link>
+              <Link to="/docs">Download Now</Link>
             </Button>
             <Button size="sm" variant="outline" className="h-10 px-8 border-border rounded-none font-bold hover:bg-secondary text-[10px] tracking-widest" asChild>
-              <Link to="/docs">READ_LOGIC</Link>
+              <Link to="/docs">Read Documentation</Link>
             </Button>
           </div>
         </div>

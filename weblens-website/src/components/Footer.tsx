@@ -27,15 +27,13 @@ export function Footer() {
           {/* Brand Panel */}
           <div className="col-span-2 md:col-span-1 space-y-4">
             <Link to="/" className="flex items-center gap-2 group">
-              <div className="h-5 w-5 bg-primary flex items-center justify-center rounded-none shadow-[0_0_10px_rgba(99,102,241,0.4)]">
-                <Command className="h-3 w-3 text-white" />
-              </div>
+              <img src="/logo-no-bg.png" alt="WebLens" className="h-6 w-6 group-hover:drop-shadow-[0_0_8px_rgba(99,102,241,0.6)] transition-all" />
               <span className="font-black tracking-tighter text-xs uppercase">WEBLENS</span>
             </Link>
             <p className="text-[10px] text-muted-foreground leading-relaxed font-mono opacity-50">
               Deterministic UI verification engine.<br />
               Built for production-grade reliability.<br />
-              v1.1.0_STABLE
+              v1.0.0
             </p>
           </div>
 

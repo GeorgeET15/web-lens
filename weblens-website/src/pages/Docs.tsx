@@ -23,44 +23,44 @@ import { VisualBlock } from "@/components/VisualBlock";
 
 const docsSections = [
   {
-    title: "System_Core",
+    title: "Getting Started",
     items: [
-      { name: "MANIFESTO", slug: "" },
-      { name: "SPECIFICATION", slug: "spec" },
-      { name: "DEPLOYMENT", slug: "deployment" }
+      { name: "Overview", slug: "" },
+      { name: "System Specs", slug: "spec" },
+      { name: "Installation", slug: "deployment" }
     ]
   },
   {
-    title: "The_Engine",
+    title: "Core Concepts",
     items: [
-      { name: "DETERMINISM", slug: "concepts" },
-      { name: "SEMANTIC_RESOLUTION", slug: "semantic" },
-      { name: "FLOW_GRAPH", slug: "flows" }
+      { name: "Reliability", slug: "concepts" },
+      { name: "Finding Elements", slug: "semantic" },
+      { name: "Test Flows", slug: "flows" }
     ]
   },
   {
-    title: "Logic_Blocks",
+    title: "Building Tests",
     items: [
-      { name: "STRUCTURE", slug: "blocks" },
-      { name: "INTERACTION", slug: "interaction" },
-      { name: "VALIDATION", slug: "validation" }
+      { name: "Visual Blocks", slug: "blocks" },
+      { name: "Interactions", slug: "interaction" },
+      { name: "Validation", slug: "validation" }
     ]
   },
   {
-    title: "Analysis",
+    title: "Debugging",
     items: [
-      { name: "TAF_SYSTEM", slug: "taf" },
-      { name: "TRACE_LOGS", slug: "trace" },
-      { name: "EVIDENCE_VAULT", slug: "evidence" }
+      { name: "Failure Analysis", slug: "taf" },
+      { name: "Trace Logs", slug: "trace" },
+      { name: "Evidence", slug: "evidence" }
     ]
   }
 ];
 
 const docContent: Record<string, { title: string; subtitle: string; body: React.ReactNode; anchors?: Record<string, string> }> = {
   "": {
-    title: "System_Manifesto",
-    subtitle: "Ground truths and intentional constraints of the WebLens engine.",
-    anchors: { "axioms": "Core Axioms", "non-goals": "Non Goals" },
+    title: "Overview",
+    subtitle: "Why WebLens is different from other testing tools.",
+    anchors: { "axioms": "Core Principles", "non-goals": "What We Avoid" },
     body: (
       <div className="space-y-8">
         <p className="text-xl text-muted-foreground leading-relaxed">
@@ -68,7 +68,7 @@ const docContent: Record<string, { title: string; subtitle: string; body: React.
         </p>
 
         <div id="axioms" className="grid gap-6 border border-border p-6 bg-secondary scroll-mt-20">
-          <div className="tech-label text-primary">Core_Axioms</div>
+          <div className="tech-label text-primary">Core Principles</div>
           <div className="space-y-4">
             <div className="flex gap-4">
               <Shield className="h-5 w-5 text-primary shrink-0" />
@@ -95,7 +95,7 @@ const docContent: Record<string, { title: string; subtitle: string; body: React.
         </div>
 
         <div id="non-goals" className="space-y-4 scroll-mt-20">
-          <div className="tech-label text-failure underline">Non_Goals</div>
+          <div className="tech-label text-failure underline">What We Avoid</div>
           <ul className="space-y-2 font-mono text-xs opacity-80">
             <li>- Indeterministic wait conditions (Implicit Waits)</li>
             <li>- "Smart" auto-healing of <span className="text-failure">running</span> flows</li>
@@ -113,9 +113,9 @@ const docContent: Record<string, { title: string; subtitle: string; body: React.
     )
   },
   "blocks": {
-    title: "Logic_Blocks_v1",
-    subtitle: "Anatomy and behavioral constraints of semantic blocks.",
-    anchors: { "demo": "Block Demonstration", "rules": "Engine Rules" },
+    title: "Visual Blocks",
+    subtitle: "Understanding the building blocks of your tests.",
+    anchors: { "demo": "Block Demo", "rules": "How Blocks Work" },
     body: (
       <div className="space-y-8">
         <p className="text-muted-foreground leading-relaxed">
@@ -124,7 +124,10 @@ const docContent: Record<string, { title: string; subtitle: string; body: React.
         </p>
 
         <div id="demo" className="space-y-4 scroll-mt-20">
-          <div className="tech-label">Block_Demonstration</div>
+          <div className="tech-label">Drag-and-Drop Editor</div>
+          <p className="text-sm text-muted-foreground">
+             WebLens uses a drag-and-drop editor. You don't write code; you just drag blocks to create your test flow.
+          </p>
           <div className="flex flex-col gap-4">
             <VisualBlock 
               type="intent" 
@@ -140,15 +143,15 @@ const docContent: Record<string, { title: string; subtitle: string; body: React.
         </div>
 
         <div id="rules" className="border-l-4 border-primary bg-secondary p-6 space-y-3 scroll-mt-20">
-          <div className="tech-label text-primary">Engine_Rule_04</div>
+          <div className="tech-label text-primary">How Blocks Work</div>
           <p className="text-sm">Blocks are purely functional. They do not store local state; they act as translators between user intent and the element resolver.</p>
         </div>
       </div>
     )
   },
   "taf": {
-    title: "TAF_System",
-    subtitle: "Trace Analysis Framework: The evidence-first debugging model.",
+    title: "Failure Analysis",
+    subtitle: "Understanding why tests fail with the Trace Analysis Framework.",
     anchors: { "components": "Components", "logs": "Trace Logs" },
     body: (
       <div className="space-y-8">
@@ -226,13 +229,18 @@ const docContent: Record<string, { title: string; subtitle: string; body: React.
     )
   },
   "deployment": {
-    title: "Deployment_Guide",
-    subtitle: "Shipping WebLens binaries and establishing CI pipelines.",
-    anchors: { "install": "Installation", "ci": "CI/Headless" },
+    title: "Installation Guide",
+    subtitle: "How to install WebLens on your computer.",
+    anchors: { "install": "Installation", "ci": "Headless Mode" },
     body: (
       <div className="space-y-8">
         <div id="install" className="p-4 border border-border bg-secondary font-mono text-xs scroll-mt-20">
-            <div className="text-muted-foreground mb-2"># Pull latest binary from GitHub Releases</div>
+            <div className="text-muted-foreground mb-2"># For Debian/Ubuntu (Recommended)</div>
+            <div className="text-success">$ wget https://github.com/georgeet15/web-lens/releases/latest/download/weblens_1.0.0_amd64.deb</div>
+            <div className="text-success">$ sudo dpkg -i weblens_1.0.0_amd64.deb</div>
+            <div className="text-muted-foreground my-2"># Launch WebLens</div>
+            <div className="text-success">$ weblens</div>
+            <div className="text-muted-foreground my-4"># Or download standalone binary</div>
             <div className="text-success">$ wget https://github.com/georgeet15/web-lens/releases/latest/download/weblens</div>
             <div className="text-muted-foreground my-2"># Grant execution permissions</div>
             <div className="text-success">$ chmod +x weblens</div>
@@ -240,7 +248,7 @@ const docContent: Record<string, { title: string; subtitle: string; body: React.
             <div className="text-success">$ ./weblens</div>
         </div>
         <div id="ci" className="space-y-4 scroll-mt-20">
-            <div className="tech-label">CI_PIPELINE_CONFIG</div>
+            <div className="tech-label">Headless Mode</div>
             <p className="text-sm text-muted-foreground leading-relaxed">
                 WebLens runs as a standalone binary in any Linux environment. No display server (X11/Wayland) is required when running in <span className="text-foreground font-bold">headless mode</span>.
             </p>
@@ -249,8 +257,8 @@ const docContent: Record<string, { title: string; subtitle: string; body: React.
     )
   },
   "concepts": {
-    title: "Determinism_Theory",
-    subtitle: "Understanding the core mathematical guarantees of the engine.",
+    title: "Reliability Theory",
+    subtitle: "Why WebLens tests are more stable than Selenium or Cypress.",
     anchors: { "theory": "Theory", "loop": "Stability Loop" },
     body: (
       <div className="space-y-6">
@@ -258,7 +266,7 @@ const docContent: Record<string, { title: string; subtitle: string; body: React.
             By relinquishing "smart" wait times for strict, polling-based verification, WebLens eliminates 99% of race conditions found in event-driven frameworks.
          </p>
          <div id="loop" className="border border-border p-6 bg-secondary scroll-mt-20">
-            <div className="tech-label text-primary mb-4">THE_10HZ_STABILITY_LOOP</div>
+            <div className="tech-label text-primary mb-4">The 10Hz Stability Loop</div>
             <div className="space-y-2 font-mono text-xs">
                 <div className="flex justify-between border-b border-border/50 pb-1">
                     <span>T+0ms</span>
@@ -282,8 +290,8 @@ const docContent: Record<string, { title: string; subtitle: string; body: React.
     )
   },
   "semantic": {
-    title: "Semantic_Resolution_v2",
-    subtitle: "The algorithm behind selector-free element locating.",
+    title: "Finding Elements",
+    subtitle: "How WebLens finds buttons and inputs without CSS selectors.",
     anchors: { "maws": "MAWS Algorithm", "weights": "Scoring Weights" },
     body: (
       <div className="space-y-8">
@@ -444,10 +452,7 @@ export default function Docs() {
           sidebarOpen ? "translate-x-0" : "-translate-x-full fixed lg:relative"
         )}>
           <div className="p-4 space-y-6">
-            <div className="flex items-center gap-2 mb-4 p-2 bg-secondary border border-border/50">
-               <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-               <div className="tech-label text-[7px] text-muted-foreground">NODE_TX_ACTIVE</div>
-            </div>
+
             {docsSections.map((section) => (
               <div key={section.title} className="space-y-3">
                 <div className="tech-label text-primary/60 text-[9px]">{section.title}</div>

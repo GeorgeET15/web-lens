@@ -23,53 +23,53 @@ import { cn } from "@/lib/utils";
 
 const featureGroups = [
   {
-    category: "ENGINE_CORE",
+    category: "Core Engine",
     features: [
       {
         icon: Fingerprint,
-        title: "Semantic Identification",
-        description: "Bypass DOM selectors entirely. Locate elements via accessibility names and semantic roles.",
-        tech: "A11Y_TREE_WALKER"
+        title: "Smart Element Finding",
+        description: "Identify elements by their text and role, not brittle/complex selectors.",
+        tech: "ACCESSIBILITY"
       },
       {
         icon: Shield,
-        title: "Deterministic Runtime",
-        description: "Zero implicit retries. Every action follows a strict, polled verification loop.",
-        tech: "DET_ENGINE_V2"
+        title: "Reliable Execution",
+        description: "Stable actions that wait for the page to be ready before interacting.",
+        tech: "DETERMINISTIC"
       }
     ]
   },
   {
-    category: "FLOW_LOGIC",
+    category: "Test Builder",
     features: [
       {
         icon: Layers,
-        title: "Block Orchestration",
-        description: "Compose complex flows using immutable logic blocks. No side-effects, no global state.",
-        tech: "ATOM_BLOCKS"
+        title: "Visual Drag-and-Drop Editor",
+        description: "Build tests by dragging and connecting blocks. Simple, visual, and powerful.",
+        tech: "VISUAL_EDITOR"
       },
       {
         icon: Database,
-        title: "Scenario Injection",
-        description: "Drive flows with external CSV/JSON matrix. Automatic iteration across data sets.",
-        tech: "DATA_LAYER"
+        title: "Data-Driven Testing",
+        description: "Run the same test with different data sets automatically.",
+        tech: "DATA_MATRIX"
       }
     ]
   },
   {
-    category: "OBSERVABILITY",
+    category: "Debug Tools",
     features: [
       {
         icon: FileSearch,
-        title: "TAF Feedback Loop",
-        description: "Factual failure attribution. No guessing—just raw evidence and internal reasoning logs.",
-        tech: "EVIDENCE_VAULT"
+        title: "Failure Analysis",
+        description: "Clear explanations when tests fail, with evidence and screenshots.",
+        tech: "EVIDENCE"
       },
       {
         icon: Activity,
-        title: "Live Trace Stream",
-        description: "Inspect engine state in real-time during execution. Full transparency into the resolver.",
-        tech: "TRACE_LOGS"
+        title: "Real-time Logs",
+        description: "Watch your test execute step-by-step in real time.",
+        tech: "LIVE_TRACE"
       }
     ]
   }
@@ -83,14 +83,14 @@ export default function Features() {
       {/* Hero */}
       <section className="relative border-b border-border">
         <div className="container mx-auto px-6 py-12 lg:py-16 max-w-7xl">
-          <div className="tech-label text-primary mb-4">Feature_Specification v1.1.0</div>
+          <div className="tech-label text-primary mb-4">Features</div>
           <h1 className="text-4xl lg:text-6xl font-bold tracking-tight mb-6">
             Professional <br />
-            <span className="italic">Constraints.</span>
+            <span className="italic text-primary">Reliability.</span>
           </h1>
           <p className="text-lg text-muted-foreground max-w-xl leading-relaxed">
-            Every feature in WebLens is an intentional constraint. We've optimized 
-            for maximum reliability by eliminating non-deterministic patterns.
+            Every feature in WebLens is designed to make your tests stable and easy to maintain. 
+            We've focused on what matters most: tests that don't flake.
           </p>
         </div>
       </section>
@@ -136,19 +136,19 @@ export default function Features() {
         <div className="container mx-auto px-6 py-16 max-w-7xl">
            <div className="grid lg:grid-cols-2 gap-12 items-center">
               <div className="space-y-6">
-                 <div className="tech-label text-failure underline text-[9px]">SYSTEM_NON_NEGOTIABLES</div>
-                 <h2 className="text-2xl font-bold tracking-tight">Reliability over Convenience.</h2>
+                 <div className="tech-label text-failure underline text-[9px]">Our Philosophy</div>
+                 <h2 className="text-2xl font-bold tracking-tight">Built for Reliability.</h2>
                  <p className="text-muted-foreground text-sm leading-relaxed">
-                    We've intentionally excluded common patterns that introduce flakiness. 
-                    WebLens will never support these features because they undermine determinism.
+                    We avoid flaky patterns to ensure your tests always work.
+                    WebLens excludes features that cause random failures.
                  </p>
                  <div className="grid gap-3">
                     {[
                       "Record and playback (Brittle)",
-                      "CSS/XPath selectors (Implementation coupled)",
-                      "AI auto-healing (Guesswork)",
-                      "Implicit retries (Hidden failure)",
-                      "Arbitrary sleeps (Non-deterministic)"
+                      "Complex CSS Selectors (Breaks easily)",
+                      "AI auto-healing (Unpredictable)",
+                      "Implicit retries (Hides bugs)",
+                      "Arbitrary sleeps (Slow & Flaky)"
                     ].map(item => (
                       <div key={item} className="flex items-center gap-3 text-sm font-mono opacity-60">
                          <span className="text-failure">✗</span>
@@ -187,16 +187,16 @@ export default function Features() {
       {/* CTA */}
       <section className="border-b border-border bg-secondary">
         <div className="container mx-auto px-6 py-16 text-center max-w-5xl space-y-6">
-          <div className="tech-label text-[9px]">NEXT_MODULE</div>
-          <h2 className="text-3xl font-bold tracking-tight">Ready for deployment?</h2>
+          <div className="tech-label text-[9px]">Comparison</div>
+          <h2 className="text-3xl font-bold tracking-tight">Ready to Compare?</h2>
           <p className="text-muted-foreground text-sm">
             See how WebLens compares with legacy automation tools and discover why 
-            deterministic verification is the new standard.
+            visual verification is the new standard.
           </p>
           <div className="flex justify-center gap-4 pt-2">
              <Button size="sm" className="h-10 px-6 bg-primary rounded-none text-[10px] font-bold tracking-widest" asChild>
                 <Link to="/why-weblens" className="gap-2">
-                  SYSTEM_COMPARISON
+                  Compare Tools
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
              </Button>

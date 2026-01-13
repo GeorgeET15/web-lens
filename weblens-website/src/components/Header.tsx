@@ -19,11 +19,10 @@ import {
 } from "lucide-react";
 
 const navigation = [
-  { name: "Theory", href: "/how-it-works", icon: Activity },
-  { name: "Flows", href: "/flows", icon: Layers },
-  { name: "Inspector", href: "/inspector", icon: Search },
-  { name: "Intelligence", href: "/ai", icon: Brain },
-  { name: "Logic", href: "/docs", icon: Book },
+  { name: "How it Works", href: "/how-it-works", icon: Activity },
+  { name: "Features", href: "/features", icon: Layers },
+  { name: "AI Assistant", href: "/ai", icon: Brain },
+  { name: "Documentation", href: "/docs", icon: Book },
 ];
 
 export function Header() {
@@ -36,12 +35,10 @@ export function Header() {
         <div className="flex items-center gap-8">
           {/* Logo Section */}
           <Link to="/" className="flex items-center gap-3 group">
-            <div className="h-7 w-7 bg-primary flex items-center justify-center rounded-none shadow-[0_0_10px_rgba(99,102,241,0.4)] group-hover:shadow-[0_0_15px_rgba(99,102,241,0.6)] transition-all">
-              <Command className="h-4 w-4 text-white" />
-            </div>
+            <img src="/logo-no-bg.png" alt="WebLens" className="h-8 w-8 group-hover:drop-shadow-[0_0_8px_rgba(99,102,241,0.6)] transition-all" />
             <span className="font-black tracking-tighter text-base uppercase">WEBLENS</span>
             <div className="h-5 w-px bg-border ml-2" />
-            <span className="tech-label text-[9px] opacity-40">STABLE_V1.1.0</span>
+            <span className="tech-label text-[9px] opacity-40">v1.0.0</span>
           </Link>
 
           {/* Technical Nav */}
@@ -87,8 +84,8 @@ export function Header() {
             className="h-9 px-5 bg-primary text-white rounded-none text-[11px] font-black tracking-widest hover:bg-primary/90 border-none"
             asChild
           >
-            <Link to="/flows" className="gap-2">
-              INIT_FLOW
+            <Link to="/docs" className="gap-2">
+              Get Started
               <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           </Button>

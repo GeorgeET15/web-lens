@@ -24,23 +24,27 @@ const milestones = [
     label: "GA_RELEASE",
     color: "text-success",
     items: [
-      "Deterministic Execution Loop",
-      "Semantic A11Y Resolver",
-      "TAF Evidence Engine",
-      "Binary Deployment Model"
+      "Reliable Test Execution",
+      "Smart Element Detection",
+      "Detailed Test Reports",
+      "Desktop Application",
+      "AI Test Generator",
+      "AI Failure Analysis",
+      "Cloud Sync",
+      "Easy Installation"
     ]
   },
   {
     status: "DEVELOPMENT",
     version: "v1.2.0",
     date: "Q1_2025",
-    label: "CROSS_BROWSER_SYNC",
+    label: "AUTOMATION_SUITE",
     color: "text-primary",
     items: [
-      "Flow Translator (AI Drafts)",
-      "Headless Parallel Execution",
-      "Stability Advisor (AI Analysis)",
-      "Team State Synchronization"
+      "CI/CD Pipeline Integration",
+      "Scheduled Flow Execution",
+      "Team Workspaces & Collaboration",
+      "Advanced Analytics Dashboard"
     ]
   },
   {
@@ -79,15 +83,14 @@ export default function Roadmap() {
       {/* Hero */}
       <section className="relative border-b border-border">
         <div className="container mx-auto px-6 py-12 lg:py-16 max-w-7xl">
-          <div className="tech-label text-primary mb-4">Development_Manifesto v1.0.0</div>
+          <div className="tech-label text-primary mb-4">Product Roadmap</div>
           <h1 className="text-4xl lg:text-6xl font-bold tracking-tight mb-6">
-            System <br />
-            <span className="italic">Evolution.</span>
+            What's Next for <br />
+            <span className="italic">WebLens</span>
           </h1>
           <p className="text-lg text-muted-foreground max-w-xl leading-relaxed">
-            The WebLens development path is strictly prioritized by determinism-first 
-            architectures. We don't release features until they meet our strict 
-            reliability thresholds.
+            We're constantly improving WebLens based on user feedback. 
+            Here's what we're working on and what's coming next.
           </p>
         </div>
       </section>

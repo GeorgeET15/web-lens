@@ -6,24 +6,24 @@
 @layer base {
   :root {
     /* Technical Premium - Ground Truth Colors (Light Mode) */
-    --background: 0 0% 100%; /* #ffffff */
-    --foreground: 0 0% 0%;   /* #000000 */
+    --background: 220 14% 96%; /* #f1f3f5 - Visible Cool Grey */
+    --foreground: 222 47% 11%; /* #0f172a - Slate 900 */
     
-    --secondary-surface: 0 0% 96%; /* #f5f5f5 */
-    --border: 0 0% 90%; /* #e5e5e5 */
+    --secondary-surface: 220 14% 93%; /* #e9ecef */
+    --border: 220 13% 88%;     /* #dee2e6 */
     
-    /* Semantic Accents */
-    --primary: 239 84% 50%;    /* Indigo - Intent (Slightly darker for light bg) */
-    --success: 161 94% 20%;    /* Emerald - Stability */
-    --failure: 354 91% 45%;    /* Rose - Anomaly */
-    --investigation: 271 91% 50%; /* Purple - Insight */
-    --warning: 38 92% 40%;     /* Amber - Capability */
+    /* Semantic Accents - Slightly desaturated for comfort */
+    --primary: 239 60% 50%;
+    --success: 161 60% 25%;
+    --failure: 354 70% 50%;
+    --investigation: 271 60% 55%;
+    --warning: 38 70% 45%;
 
-    --muted: 0 0% 90%;
-    --muted-foreground: 0 0% 40%;
+    --muted: 220 14% 93%;
+    --muted-foreground: 215 16% 47%;
     
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 0%;
+    --card: 0 0% 100%;       /* Pure White Cards to pop against grey bg */
+    --card-foreground: 222 47% 11%;
 
     --radius: 0px;
     --ring: 239 84% 50%;
