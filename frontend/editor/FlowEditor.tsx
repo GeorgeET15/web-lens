@@ -93,6 +93,7 @@ interface FlowEditorProps {
   externalVariables?: { key: string, label: string }[];
   environments?: Environment[];
   selectedEnvironmentId?: string;
+  onAutoLaunch?: (url: string) => Promise<void>;
 }
 
 
@@ -236,7 +237,8 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
     onViewScenario,
     externalVariables = [],
     environments = [],
-    selectedEnvironmentId = ''
+    selectedEnvironmentId = '',
+    onAutoLaunch
   }, ref) => {
     // State for blocks
     const [blocks, setBlocks] = useState<EditorBlock[]>([]);
@@ -1883,6 +1885,7 @@ const [dialogConfig, setDialogConfig] = useState<{
                 onChatUpdate={setChatHistory}
                 currentFlow={FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, schemaVersion, currentFlowId || undefined, flowDescription, chatHistory)}
                 onRequestPick={onRequestPick}
+                onAutoLaunch={onAutoLaunch}
              />
         </div>
 

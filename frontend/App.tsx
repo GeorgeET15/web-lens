@@ -444,6 +444,25 @@ function Dashboard() {
     setIsInspectorOpen(true);
   };
 
+  const handleAutoLaunchInspector = async (url: string) => {
+    try {
+      const resp = await fetch(API_ENDPOINTS.INSPECTOR_START, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      if (resp.ok) {
+        addToast('success', 'Browser launched automatically.');
+      } else {
+        throw new Error('Launch failed');
+      }
+    } catch (err) {
+      console.error('Auto-launch failed:', err);
+      addToast('error', 'Browser auto-launch failed.');
+      throw err;
+    }
+  };
+
   // Extract context URL from the first open_page block
   const getContextUrl = (): string | undefined => {
     if (!currentFlow) return undefined;
@@ -616,6 +635,7 @@ function Dashboard() {
                     if (errors.length > 0) console.warn('Errors:', errors);
                 }}
                 onRequestPick={handleStartPicking}
+                onAutoLaunch={handleAutoLaunchInspector}
                 highlightBlockId={selectedBlockId}
                 onBlockClick={(id) => setSelectedBlockId(id)}
                 showOnboarding={showOnboarding}

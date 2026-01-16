@@ -486,16 +486,23 @@ async def resync_inspector():
 
 @app.get("/api/ai/scrape-interactions")
 async def ai_scrape_interactions():
-    """Execute autonomous scraping in the active inspector for AI context."""
+    """Execute autonomous scraping in the active browser for AI context."""
     global active_inspector
     if not active_inspector or not active_inspector.driver:
-        return {"status": "error", "message": "Inspector not running", "elements": []}
+        return {"status": "error", "message": "No active browser found for AI inspection", "elements": []}
     
     try:
         # Ensure we are on top-level frame
         active_inspector.driver.switch_to.default_content()
         
-        # Execute the scraping function added to inspector.js
+        # Check if the AI inspector is already loaded, otherwise force inject
+        is_loaded = active_inspector.driver.execute_script("return typeof window.__scrapeInteractions === 'function'")
+        if not is_loaded:
+            logger.info("AI Inspector logic missing in browser, injecting on-demand...")
+            with open(BACKEND_DIR / "ai_inspector.js", "r") as f:
+                active_inspector.driver.execute_script(f.read())
+        
+        # Execute the scraping function from ai_inspector.js
         elements = active_inspector.driver.execute_script("return window.__scrapeInteractions ? window.__scrapeInteractions() : []")
         
         # Add basic page context

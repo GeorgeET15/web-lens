@@ -17,6 +17,7 @@ interface GeniePromptProps {
     onChatUpdate?: (chatHistory: any) => void;
     currentFlow?: any;
     onRequestPick?: (blockType: string, callback: (element: any) => void) => void;
+    onAutoLaunch?: (url: string) => Promise<void>;
 }
 
 interface GenieMessage {
@@ -117,7 +118,8 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
     chatHistory,
     onChatUpdate,
     currentFlow,
-    onRequestPick
+    onRequestPick,
+    onAutoLaunch
 }) => {
     const [intent, setIntent] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
@@ -217,11 +219,28 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
                 },
                 body: JSON.stringify(requestBody)
             });
-
             if (resp.ok) {
                 const result = await resp.json();
                 
-                // IF AI NEEDS AN ELEMENT PICK
+                // IF AI NEEDS TO START BROWSER
+                if (result.action === 'start_inspector' && onAutoLaunch) {
+                    setMessages(prev => [...prev, { 
+                        role: 'assistant', 
+                        content: result.message || "I'm launching the browser to see the page...",
+                        mode 
+                    }]);
+                    
+                    try {
+                        await onAutoLaunch(result.url);
+                        setIsGenerating(false);
+                        return;
+                    } catch (err) {
+                        addToast('error', 'Failed to auto-launch browser.');
+                        setIsGenerating(false);
+                        return;
+                    }
+                }
+
                 if (result.action === 'pick_element' && onRequestPick) {
                     // Show assistant's request
                     setMessages(prev => [...prev, { 
@@ -289,12 +308,12 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
         return (
             <div className="flex flex-col h-full bg-zinc-950 border-l border-white/5 relative">
                 {/* Ambient Background Gradient */}
-                <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/5 via-transparent to-transparent pointer-events-none" />
+                <div className="absolute inset-0 pointer-events-none" />
 
                 {/* Header */}
                 <div className="relative flex items-center justify-between px-4 py-4 border-b border-white/5 bg-zinc-900/30 backdrop-blur-sm z-10">
                     <div className="flex items-center gap-3">
-                        <div className="w-7 h-7 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shadow-lg shadow-indigo-500/10">
+                        <div className="w-7 h-7 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
                             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
                         </div>
                         <span className="text-sm font-bold text-zinc-100 tracking-wide">WebLens AI</span>
@@ -456,35 +475,9 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
                 </div>
 
                 {/* Input Area */}
-                <div className="p-4 bg-zinc-950 border-t border-white/5 relative z-10">
-                    {/* Mode Toggle Overlay - Optional, maybe put inside input area? */}
-                    <div className="flex justify-center mb-3">
-                         <div className="flex items-center gap-1 bg-zinc-900 border border-white/10 rounded-lg p-1 shadow-sm">
-                            <button
-                                onClick={() => setMode('ask')}
-                                className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${
-                                    mode === 'ask' 
-                                        ? 'bg-indigo-500 text-white shadow-sm' 
-                                        : 'text-zinc-500 hover:text-zinc-300'
-                                }`}
-                            >
-                                Ask
-                            </button>
-                            <button
-                                onClick={() => setMode('build')}
-                                className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${
-                                    mode === 'build' 
-                                        ? 'bg-white text-black shadow-sm' 
-                                        : 'text-zinc-500 hover:text-zinc-300'
-                                }`}
-                            >
-                                Build
-                            </button>
-                        </div>
-                    </div>
-
+                <div className="p-4 pt-0 bg-zinc-950 relative z-10">
                     <div className="relative group">
-                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 -m-[1px]" />
+                        <div className="absolute inset-0 rounded-2xl" />
                         <div className="relative bg-zinc-900 border border-white/10 rounded-2xl flex items-end p-2 transition-colors group-focus-within:border-white/20 group-focus-within:bg-zinc-900/80">
                             <VariableTextarea 
                                 value={intent}
@@ -514,8 +507,34 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
                             </button>
                         </div>
                     </div>
-                    <div className="text-[10px] text-zinc-600 mt-2 px-1 text-center font-medium">
-                        Enter to send • Shift+Enter for new line
+
+                    <div className="flex items-center justify-between mt-3 px-1">
+                        <div className="flex items-center gap-1 bg-zinc-900 border border-white/10 rounded-lg p-0.5 shadow-sm">
+                            <button
+                                onClick={() => setMode('ask')}
+                                className={`px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${
+                                    mode === 'ask' 
+                                        ? 'bg-indigo-500 text-white shadow-sm' 
+                                        : 'text-zinc-500 hover:text-zinc-300'
+                                }`}
+                            >
+                                Ask
+                            </button>
+                            <button
+                                onClick={() => setMode('build')}
+                                className={`px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${
+                                    mode === 'build' 
+                                        ? 'bg-white text-black shadow-sm' 
+                                        : 'text-zinc-500 hover:text-zinc-300'
+                                }`}
+                            >
+                                Build
+                            </button>
+                        </div>
+
+                        <div className="text-[10px] text-zinc-600 font-medium">
+                            Enter to send • Shift+Enter for new line
+                        </div>
                     </div>
                 </div>
 

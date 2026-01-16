@@ -266,12 +266,20 @@ class SeleniumEngine(BrowserEngine):
         
         self._initialize_driver()
         
-        # HUD Script Cache
+        # HUD & AI Inspector Script Cache
         self._hud_script = ""
-        hud_script_path = os.path.join(os.path.dirname(__file__), "hud_overlay.js")
+        self._ai_inspector_script = ""
+        
+        backend_dir = os.path.dirname(__file__)
+        hud_script_path = os.path.join(backend_dir, "hud_overlay.js")
         if os.path.exists(hud_script_path):
              with open(hud_script_path, "r") as f:
                  self._hud_script = f.read()
+
+        ai_inspector_path = os.path.join(backend_dir, "ai_inspector.js")
+        if os.path.exists(ai_inspector_path):
+            with open(ai_inspector_path, "r") as f:
+                self._ai_inspector_script = f.read()
     
     def _initialize_driver(self) -> None:
         """Initialize Chrome WebDriver with options."""
@@ -321,6 +329,16 @@ class SeleniumEngine(BrowserEngine):
             
             self.driver = webdriver.Chrome(options=options)
             self.driver.implicitly_wait(self.implicit_wait)
+            
+            # AI Inspector Persistence: CDP injection to ensure autonomous vision on every page
+            if self._ai_inspector_script:
+                try:
+                    self.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+                        'source': self._ai_inspector_script
+                    })
+                    logger.info("SeleniumEngine: Autonomous AI Inspector CDP injection armed.")
+                except Exception as e:
+                    logger.warning(f"SeleniumEngine: CDP AI Inspector injection failed: {e}")
         except WebDriverException as e:
             raise BrowserEngineError(
                 "Could not start the browser. Please ensure Chrome is installed.",

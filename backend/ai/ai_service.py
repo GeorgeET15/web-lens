@@ -201,6 +201,8 @@ class AIService:
                 name = el.get('name', '')[:50]
                 map_context += f"- [{el['id']}] {el['role'].upper()}: \"{name}\" ({el['tagName']})\n"
             map_context += "\nINSTRUCTIONS: If the user refers to an element in the map above, use its exact metadata (name, role, tagName) for block parameters. Use this map to avoid asking the user for a manual pick.\n"
+        else:
+            map_context = "\n[SYSTEM NOTE: BROWSER IS CURRENTLY CLOSED. YOU CANNOT SEE ANY PAGE ELEMENTS. IF THE USER'S INTENT REQUIRES THE BROWSER, USE THE 'start_inspector' ACTION OR ASK THE USER TO OPEN A URL.]\n"
 
         history_context = ""
         if history:
@@ -314,9 +316,13 @@ class AIService:
             - DO NOT return a flow JSON with an empty "blocks" array.
 
             Option 3 (Client Action Required):
-            - If you need the user to select a specific element on the page (e.g. for a verification or click) but you don't have its context, return ONLY the JSON wrapped in ---JSON-START--- and ---JSON-END---:
-              {{ "action": "pick_element", "message": "A helpful message explaining which element to select." }}
-            - Use this sparingly; only if the intent is clearly about a specific UI element that isn't in your current context.
+            - If you need the user to select a specific element on the page (manual pick) but you don't have its context and it isn't in the map, return:
+              { "action": "pick_element", "message": "Why a pick is needed." }
+            
+            Option 4 (Autonomous Browser Launch):
+            - If no browser is currently active (INTERACTION MAP is missing/empty) AND the user's intent requires seeing a page or interacting with a UI:
+              - If you know the URL: { "action": "start_inspector", "url": "https://url.com", "message": "I'm launching the browser to see the page..." }
+              - If you don't know the URL: Return a message asking for the URL.
             """.format(
                 history_context=history_context,
                 variable_context=variable_context,
