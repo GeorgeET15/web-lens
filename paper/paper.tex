@@ -1,0 +1,233 @@
+\documentclass[10pt,conference]{IEEEtran}
+
+% ==================== Packages ====================
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{caption}
+
+% ==================== Hyperref ====================
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  citecolor=blue,
+  urlcolor=blue
+}
+
+% ==================== Caption Styling ====================
+\captionsetup{
+  font=small,
+  labelfont=bf,
+  labelsep=period
+}
+
+% ==================== List Styling ====================
+\setlist{nosep,leftmargin=*}
+
+% ==================== Micro Typography ====================
+\microtypesetup{protrusion=true, expansion=true}
+
+% ==================== Title ====================
+\title{WebLens: Deterministic Semantic Verification for Resilient Web Automation}
+
+% ==================== Author ====================
+\author{
+\IEEEauthorblockN{George Emmanuel Thomas}
+\IEEEauthorblockA{\textit{Software Engineering and Automation, WebLens Research} \\
+georgemmanuelthomas@gmail.com \\
+\url{github.com/GeorgeET15} $\cdot$ \url{georgeemmanuelthomas.dev}}
+}
+
+
+\begin{document}
+\maketitle
+
+% ==================== Abstract ====================
+\begin{abstract}
+Web automation frameworks incur a growing \emph{selector tax}: hidden maintenance and reliability costs caused by brittle structural selectors, implicit waits, and implementation-coupled scripts. These approaches conflate element identity with DOM position, leading to flakiness and ambiguous failures. This paper introduces \emph{Deterministic Semantic Verification (DSV)}, a paradigm shift from event-driven testing to intent-driven verification, and presents \textbf{WebLens}, a local-first semantic verification engine that resolves elements through Multi-Attribute Weighted Scoring (MAWS). By enforcing deterministic stability guarantees and eliminating implicit waits, WebLens transforms automation failures into explainable verification outcomes and advances the state of the art in resilient web testing.
+\end{abstract}
+
+% ==================== Introduction ====================
+\section{Introduction}
+\vspace{-0.3em}
+
+Web automation underpins modern software delivery, yet prevailing approaches remain inherently fragile. Dominant frameworks adopt event-driven scripting models that bind test logic to structural selectors such as CSS or XPath, implicitly assuming that correctness will eventually emerge through retries, waits, and timing heuristics. Current research suggests that the manual effort required to maintain these implementation-coupled scripts constitutes a significant bottleneck in the software lifecycle \cite{leotta2014repairing}.
+
+At the core of this fragility lies a fundamental conflation: traditional automation equates element identity with DOM structure. Selectors encode \emph{where} an element appears rather than \emph{what} it represents in user intent. Recent advancements in Large Language Models (LLMs) have begun to facilitate a transition toward automated script generation from high-level natural language intents \cite{li2023guiding}. However, bridging the gap between intent and deterministic execution remains a critical challenge.
+
+This paper introduces \emph{Deterministic Semantic Verification (DSV)}, a paradigm that inverts the conventional automation model. Instead of driving the browser optimistically and reacting to failure, DSV requires that semantic intent be resolved unambiguously and that application state satisfy explicit stability invariants \emph{before} any interaction is permitted. In this model, automation is not an imperative script but a consequence of verified eligibility.
+
+The paper then presents \textbf{WebLens}, a deterministic semantic verification engine that operationalizes this paradigm for web interfaces. WebLens resolves UI elements through Multi-Attribute Weighted Scoring (MAWS), enforcing confidence thresholds that eliminate ambiguity, and applies a Stability Guard that proves application quiescence prior to interaction. When verification fails, WebLens does not retry; it produces structured, explainable diagnostics that assign clear ownership of failure.
+
+% ==================== Architecture ====================
+\section{Architecture and Design}
+\vspace{-0.3em}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{images/weblens_architecture.png}
+  \caption{WebLens execution pipeline showing intent-driven resolution, deterministic stability enforcement, and diagnostic feedback.}
+  \label{fig:weblens-architecture}
+\end{figure}
+
+\subsection{Execution Model}
+
+WebLens workflows are constructed as Directed Acyclic Graphs (DAGs) of immutable \emph{Atomic Blocks}. Unlike traditional models, WebLens adopts a context-aware approach to UI interaction, where the engine audits the semantic landscape of the page prior to each transition.
+
+Each block represents a side-effect-free verification or interaction unit, ensuring referential transparency and deterministic execution order. Prior to runtime, workflows pass through an \emph{Execution Gate} that statically validates semantic eligibility, branch completeness, and variable provenance. 
+
+\subsection{Autonomous Semantic Discovery}
+
+A key innovation in WebLens is the \emph{Autonomous AI Inspector}, a background scraping engine that performs real-time semantic audits of the page. By resolving element references through an intent-driven interaction map, WebLens eliminates the need for manual element picking for standard UI components, facilitating a "headless-first" development experience where the AI autonomously maps intent to physical UI targets.
+
+% ==================== Methodology ====================
+\section{Proposed Methodology}
+\vspace{-0.3em}
+
+\subsection{Multi-Attribute Weighted Scoring (MAWS)}
+
+To resolve dynamic elements without selectors, WebLens employs Multi-Attribute Weighted Scoring (MAWS), a semantic resolution mechanism that evaluates candidate elements across multiple intent-aligned attributes. This aligns with modern testing trends that prioritize semantic identity over presentational details \cite{thoughtworkssemantic}.
+
+For a candidate element $E$, the confidence score $S(E)$ is defined as:
+\begin{equation}
+S(E) = \sum_{i=1}^{n} \left(w_i \cdot m_i\right) + \text{Bonus}_{\text{proximity}}
+\end{equation}
+
+\begin{table}[t]
+\centering
+\caption{Primary MAWS Semantic Weights}
+\begin{tabular}{l c}
+\toprule
+\textbf{Semantic Signal} & \textbf{Weight} \\
+\midrule
+Test-ID (\texttt{data-testid}) & 15.0 \\
+Semantic Name / Label & 10.0 \\
+ARIA Role & 5.0 \\
+Hinting Attributes & 3.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{images/maws_flowchart.png}
+  \caption{MAWS semantic resolution flow showing candidate extraction, weighted scoring, threshold validation, and ambiguity handling.}
+  \label{fig:maws-flow}
+\end{figure}
+
+\subsection{MAWS Resolution Loop}
+
+\begin{algorithm}[t]
+\caption{MAWS Resolution Loop}
+\small
+\begin{algorithmic}[1]
+\FOR{each candidate element $E$}
+  \STATE Compute score $S(E)$
+\ENDFOR
+\STATE Select $E^* \leftarrow \arg\max S(E)$
+\IF{$S(E^*) < \theta$}
+  \STATE \textbf{Fail} with ambiguity diagnostic
+\ENDIF
+\STATE \textbf{Return} $E^*$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Structural Fallback}
+
+In semantically void contexts, WebLens applies a Structural Intent Resolver that leverages icon pattern matching, SVG path semantics, and spatial clustering to infer user intent without reliance on DOM hierarchy.
+
+% ==================== Stability ====================
+\section{Implementation: Deterministic Stability}
+\vspace{-0.3em}
+
+Before any interaction, WebLens enforces a Stability Guard that verifies application quiescence through independent probes.
+
+\subsection{Stability Probes}
+
+An element is considered stable only if all probes pass:
+\begin{enumerate}[label=\arabic*.,leftmargin=*]
+  \item \textbf{DOM Probe}: \texttt{document.readyState = complete}
+  \item \textbf{Typography Probe}: \texttt{document.fonts.ready}
+  \item \textbf{Visual Probe}: Coordinate stability
+\end{enumerate}
+
+The coordinate stability probe ensures that the target element is no longer being shifted by asynchronous layout calculations or CSS transitions.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{images/stability_loop.png}
+  \caption{Deterministic stability loop enforcing DOM, typography, and visual quiescence prior to interaction.}
+  \label{fig:stability-loop}
+\end{figure}
+
+% ==================== Engineering Artifact ====================
+\section{Engineering Artifact: Trace Analysis Framework}
+\vspace{-0.3em}
+
+Traditional stack traces identify failure location but obscure causality. WebLens introduces the Trace Analysis Framework (TAF), which decomposes failures into:
+\begin{itemize}
+  \item \textbf{Trace}: Chronological execution events
+  \item \textbf{Analysis}: Engine decision reasoning
+  \item \textbf{Feedback}: Actionable remediation guidance
+\end{itemize}
+
+TAF transforms automation failures from opaque timeouts into explainable verification outcomes. When a failure is detected, WebLens utilizes multimodal models to analyze visual evidence and resolve the discrepancy.
+
+% ==================== Evaluation ====================
+\section{Evaluation: Failure Ownership}
+\vspace{-0.3em}
+
+Each WebLens failure is assigned a single owner, eliminating ambiguous flakiness.
+
+\begin{table}[t]
+\centering
+\caption{Failure Ownership Model}
+\begin{tabular}{l l}
+\toprule
+\textbf{Owner} & \textbf{Failure Cause} \\
+\midrule
+USER & Incorrect intent or logic \\
+APP & Application regression \\
+ENGINE & Semantic ambiguity \\
+SYSTEM & Infrastructure failure \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This explicit ownership model significantly reduces Mean Time to Resolution by directing remediation efforts immediately to the responsible layer.
+
+% ==================== Related Work ====================
+\section{References and Prior Art}
+\vspace{-0.3em}
+
+WebLens addresses two long-standing challenges in automated web testing: selector fragility and test flakiness. 
+
+\subsection{Selector Fragility and Repair}
+
+Leotta et al.~\cite{leotta2014repairing} demonstrate that structural selectors represent a dominant maintenance cost. Choudhary et al.~\cite{choudhary2011automated} propose heuristic-driven GUI test repair via re-identification. Montoto et al.~\cite{montoto2016robust} explore multi-attribute locator strategies to improve resilience while remaining structurally coupled. WebLens extends these concepts by shifting from \emph{repair} (reactive) to \emph{semantic verification} (proactive), leveraging the WAI-ARIA standards \cite{w3caria} as the authoritative source of truth.
+
+\subsection{Test Flakiness and Determinism}
+
+Luo et al.~\cite{luo2014empirical} and Bell et al.~\cite{bell2018deflaker} emphasize that flakiness is often a product of non-deterministic browser environments. WebLens applies strict stability probes to enforce determinism as a first-class execution property.
+
+\subsection{AI-Powered Testing}
+
+Recent research has explored Large Language Models for automated web testing and script generation \cite{li2023guiding}. WebLens integrates these models not as a replacement for logic, but as a context-aware advisor for resolving semantic ambiguity and facilitating autonomous discovery from natural language intents.
+
+% ==================== Conclusion ====================
+\section{Conclusion}
+\vspace{-0.3em}
+
+This paper introduced Deterministic Semantic Verification and presented WebLens as its practical realization. By replacing selectors with semantic intent, enforcing deterministic stability guarantees, and providing explainable diagnostics through multimodal AI and context-aware auditing, WebLens reframes web automation as verifiable execution.
+
+% ==================== Bibliography ====================
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
