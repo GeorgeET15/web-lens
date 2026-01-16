@@ -317,11 +317,11 @@ class AIService:
 
             Option 3 (Client Action Required):
             - If you need the user to select a specific element on the page (manual pick) but you don't have its context and it isn't in the map, return:
-              { "action": "pick_element", "message": "Why a pick is needed." }
+              {{ "action": "pick_element", "message": "Why a pick is needed." }}
             
             Option 4 (Autonomous Browser Launch):
             - If no browser is currently active (INTERACTION MAP is missing/empty) AND the user's intent requires seeing a page or interacting with a UI:
-              - If you know the URL: { "action": "start_inspector", "url": "https://url.com", "message": "I'm launching the browser to see the page..." }
+              - If you know the URL: {{ "action": "start_inspector", "url": "https://url.com", "message": "I'm launching the browser to see the page..." }}
               - If you don't know the URL: Return a message asking for the URL.
             """.format(
                 history_context=history_context,

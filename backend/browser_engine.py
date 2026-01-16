@@ -264,8 +264,6 @@ class SeleniumEngine(BrowserEngine):
         # Persistent network log state for cross-poll correlation
         self._network_id_map: Dict[str, Dict[str, Any]] = {}
         
-        self._initialize_driver()
-        
         # HUD & AI Inspector Script Cache
         self._hud_script = ""
         self._ai_inspector_script = ""
@@ -280,6 +278,8 @@ class SeleniumEngine(BrowserEngine):
         if os.path.exists(ai_inspector_path):
             with open(ai_inspector_path, "r") as f:
                 self._ai_inspector_script = f.read()
+        
+        self._initialize_driver()
     
     def _initialize_driver(self) -> None:
         """Initialize Chrome WebDriver with options."""
@@ -770,15 +770,28 @@ class SeleniumEngine(BrowserEngine):
              raise BrowserEngineError(f"Failed to upload file: {str(e)}")
 
     def get_element_text(self, element: Any) -> str:
-        """Get text content from element."""
+        """Get text content from element. Optimized to match AI vision (including values, placeholders)."""
         if not isinstance(element, WebElement):
             raise BrowserEngineError("Invalid element for text extraction")
         
         try:
+            # 1. Standard innerText
             text = element.text
+            
+            # 2. If empty, check textContent via JS (sometimes more reliable for hidden/styled text)
             if not text:
                 text = self.driver.execute_script("return arguments[0].textContent;", element)
-            return text.strip()
+            
+            # 3. If still empty, check visible attributes (Value, Placeholder, Aria-Label, Title)
+            if not (text and text.strip()):
+                attrs = ['value', 'placeholder', 'aria-label', 'title']
+                for attr in attrs:
+                    val = element.get_attribute(attr)
+                    if val and val.strip():
+                        text = val
+                        break
+                        
+            return (text or "").strip()
         except Exception as e:
             raise BrowserEngineError(f"Failed to get element text: {str(e)}")
 

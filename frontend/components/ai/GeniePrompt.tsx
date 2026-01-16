@@ -169,6 +169,15 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
         if (!overrideElement) {
             const newUserMessage: GenieMessage = { role: 'user', content: currentIntent, mode };
             setMessages(prev => [...prev, newUserMessage]);
+        } else {
+            // Show that an element was picked to avoid "uncertainty gap"
+            const pickLabel = overrideElement.name || overrideElement.role || 'element';
+            const feedbackMessage: GenieMessage = { 
+                role: 'user', 
+                content: `[Selected ${pickLabel}]`, 
+                mode 
+            };
+            setMessages(prev => [...prev, feedbackMessage]);
         }
         
         // CHECK FOR @verify COMMAND: REMOVED (Now handled intelligently by AI)
