@@ -18,7 +18,8 @@ export const FlowTransformer = {
     scenarioSets: any[] = [],
     schema_version: number = 1,
     id?: string,
-    description?: string
+    description?: string,
+    chat_history?: any
   ): FlowGraph => {
     
     // 1. Convert Variables
@@ -109,7 +110,8 @@ export const FlowTransformer = {
           scenario_name: s.scenarioName || s.scenario_name,
           values: s.values
         }))
-      }))
+      })),
+      chat_history: chat_history || {}
     };
   },
 

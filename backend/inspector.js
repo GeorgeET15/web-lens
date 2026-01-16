@@ -527,6 +527,68 @@
             }, true);
         }
 
+        // --- AI Autonomous Inspector (New) ---
+        window.__scrapeInteractions = function() {
+            const interactiveElements = [];
+            const allElements = document.querySelectorAll('button, a, input, select, textarea, [role], [onclick], [contenteditable="true"]');
+            
+            // Add elements with pointer cursor as secondary targets
+            const potentialTargets = Array.from(allElements);
+            
+            potentialTargets.forEach((el, index) => {
+                // Skip if hidden OR part of inspector UI
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden' || el.id?.startsWith('__visual-inspector')) return;
+                
+                // Check if visible in viewport (Optional optimization)
+                const rect = el.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) return;
+
+                // Extract Name Logic (Same as pick logic)
+                let name = el.getAttribute('aria-label') || '';
+                if (!name && el.id) {
+                    const label = document.querySelector(`label[for="${el.id}"]`);
+                    if (label) name = label.innerText;
+                }
+                if (!name) {
+                    name = (el.innerText || el.getAttribute('placeholder') || el.title || el.value || '').trim();
+                }
+                if (!name && el.tagName === 'INPUT' && el.type === 'file') name = 'File Input';
+                
+                // Limit name length for AI context
+                name = name.substring(0, 100);
+
+                // Extract Role
+                let role = el.getAttribute('role');
+                if (!role) {
+                    const tag = el.tagName;
+                    if (tag === 'BUTTON') role = 'button';
+                    else if (tag === 'A') role = 'link';
+                    else if (tag === 'INPUT') {
+                        if (['submit', 'button', 'reset'].includes(el.type)) role = 'button';
+                        else role = 'input';
+                    } else {
+                        role = tag.toLowerCase();
+                    }
+                }
+
+                interactiveElements.push({
+                    id: (index + 1).toString(),
+                    tagName: el.tagName.toLowerCase(),
+                    role: role,
+                    name: name,
+                    capabilities: detectCapabilities(el),
+                    metadata: {
+                        id: el.id || undefined,
+                        className: el.className || undefined
+                    }
+                });
+            });
+
+            // Return limited list to avoid token blowup (Top 150 most relevant)
+            return interactiveElements.slice(0, 150);
+        };
+
         createUI();
         // Sticky UI Check: Re-run every 2 seconds to ensure elements hasn't been nuked by SPA
         setInterval(createUI, 2000);

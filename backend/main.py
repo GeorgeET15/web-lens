@@ -190,6 +190,7 @@ from execution_manager import (
 
 # --- Inspector State ---
 active_inspector: Optional[SeleniumEngine] = None
+ai_inspector: Optional[SeleniumEngine] = None
 inspector_clients: List[Any] = []  # WebSocket clients (using Any for simplicity)
 
 # --- Routes ---
@@ -197,6 +198,14 @@ inspector_clients: List[Any] = []  # WebSocket clients (using Any for simplicity
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy"}
+
+@app.get("/api/inspector/status")
+async def get_inspector_status():
+    """Return status of both Live and AI inspectors."""
+    return {
+        "live": "online" if (active_inspector and active_inspector.driver) else "offline",
+        "ai": "online" if (ai_inspector and ai_inspector.driver) else "offline"
+    }
 
 from fastapi import Depends, Header
 
@@ -475,6 +484,35 @@ async def resync_inspector():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/ai/scrape-interactions")
+async def ai_scrape_interactions():
+    """Execute autonomous scraping in the active inspector for AI context."""
+    global active_inspector
+    if not active_inspector or not active_inspector.driver:
+        return {"status": "error", "message": "Inspector not running", "elements": []}
+    
+    try:
+        # Ensure we are on top-level frame
+        active_inspector.driver.switch_to.default_content()
+        
+        # Execute the scraping function added to inspector.js
+        elements = active_inspector.driver.execute_script("return window.__scrapeInteractions ? window.__scrapeInteractions() : []")
+        
+        # Add basic page context
+        page_title = active_inspector.driver.title
+        current_url = active_inspector.driver.current_url
+        
+        return {
+            "status": "success",
+            "page_title": page_title,
+            "url": current_url,
+            "elements": elements
+        }
+    except Exception as e:
+        logger.error(f"AI Scrape failed: {e}")
+        return {"status": "error", "message": str(e), "elements": []}
+
+
 @app.websocket("/ws/inspector")
 async def inspector_websocket(websocket: WebSocket):
     global active_inspector 
@@ -534,7 +572,28 @@ async def inspector_websocket(websocket: WebSocket):
                     picked_data = active_inspector.driver.execute_script("return window.__lastPicked")
                     
                     if picked_data:
-                        await websocket.send_json({"type": "picked_element", "element": picked_data})
+                        # CAPTURE FULL CONTEXT
+                        html_context = ""
+                        screenshot_context = ""
+                        
+                        try:
+                            html_context = active_inspector.driver.page_source
+                        except Exception as e:
+                            logger.error(f"Failed to capture HTML context: {e}")
+                            
+                        try:
+                            # Optimize: Resize for screenshot to reduce payload size if needed, 
+                            # but for now we take full window.
+                            screenshot_context = active_inspector.driver.get_screenshot_as_base64()
+                        except Exception as e:
+                            logger.error(f"Failed to capture Screenshot context: {e}")
+
+                        await websocket.send_json({
+                            "type": "picked_element", 
+                            "element": picked_data,
+                            "html_context": html_context,
+                            "screenshot_context": screenshot_context
+                        })
                         active_inspector.driver.execute_script("window.__lastPicked = null")
                     
                     # 4. URL Tracking
@@ -857,7 +916,8 @@ async def list_flows(user_id: Optional[str] = Depends(get_current_user)):
                         "updated_at": record['updated_at'],
                         "last_run": record.get('last_run'),
                         "source": "cloud",
-                        "graph": record['graph']
+                        "graph": record['graph'],
+                        "chat_history": record.get('chat_history', {})
                     })
             except Exception as e:
                 logger.error(f"Failed to fetch cloud flows: {e}")

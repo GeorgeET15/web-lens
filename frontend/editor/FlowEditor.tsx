@@ -47,7 +47,7 @@ export interface FlowEditorRef {
   scrollToBlock: (blockId: string) => void;
   createNewFlow: () => void;
   loadFlow: (flow: FlowGraph) => void;
-  exportFlow: () => void;
+  exportFlow: (format?: 'weblens' | 'playwright-python' | 'playwright-java' | 'selenium-python' | 'selenium-java') => void;
   triggerImport: () => void;
 }
 
@@ -261,6 +261,13 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
     
     // Genie AI Side Panel
     const [isGenieOpen, setIsGenieOpen] = useState(false);
+    const [genieWidth, setGenieWidth] = useState(() => {
+        const saved = localStorage.getItem('flow-genie-width');
+        return saved ? parseInt(saved, 10) : 400;
+    });
+    const [isResizingGenie, setIsResizingGenie] = useState(false);
+    const [flowSource, setFlowSource] = useState<'local' | 'cloud' | null>(null);
+    const [chatHistory, setChatHistory] = useState<any>(null);
 
     // Block search
     const [blockSearchQuery, setBlockSearchQuery] = useState('');
@@ -345,7 +352,7 @@ const [dialogConfig, setDialogConfig] = useState<{
     }, [environments, selectedEnvironmentId, globalVariables, externalVariables]);
 
     useEffect(() => {
-      const flow = FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, schemaVersion);
+      const flow = FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, schemaVersion, undefined, undefined, chatHistory);
       
       onFlowChange?.(flow);
       onValidationError?.([]); 
@@ -464,41 +471,63 @@ const [dialogConfig, setDialogConfig] = useState<{
                 const isCloud = savedFlows.find(f => f.id === flow.id)?.sources?.includes('cloud');
                 if (isCloud) {
                     FlowStorage.trackUsageCloud(flow.id);
+                    setFlowSource('cloud');
+                } else {
+                    setFlowSource('local');
                 }
+                setChatHistory(flow.chat_history || {});
+            } else {
+                setFlowSource(null);
+                setChatHistory({});
             }
             resetView();
         },
-        exportFlow: () => {
-            handleExport();
+        exportFlow: (format?: 'weblens' | 'playwright-python' | 'playwright-java' | 'selenium-python' | 'selenium-java') => {
+            handleExport(format);
         },
         triggerImport: () => {
             document.getElementById('import-file-input')?.click();
         }
     }));
 
+    // Real-time Chat Sync Effect
+    useEffect(() => {
+        if (flowSource === 'cloud' && currentFlowId && chatHistory) {
+            const timer = setTimeout(async () => {
+                await FlowStorage.syncChatToCloud(currentFlowId, chatHistory);
+            }, 3000); // 3s debounce for real-time feel without spamming
+            return () => clearTimeout(timer);
+        }
+    }, [chatHistory, flowSource, currentFlowId]);
 
-
-
-
-
-    // Resizing Logic
+    // Resizing Logic for Sidebar and Genie
     useEffect(() => {
       const handleMouseMove = (e: MouseEvent) => {
-        if (!isResizingSidebar) return;
-        const newWidth = e.clientX;
-        const minWidth = 200;
-        const maxWidth = 500;
-        if (newWidth >= minWidth && newWidth <= maxWidth) {
-          setSidebarWidth(newWidth);
-          localStorage.setItem('flow-sidebar-width', newWidth.toString());
+        if (isResizingSidebar) {
+            const newWidth = e.clientX;
+            const minWidth = 200;
+            const maxWidth = 500;
+            if (newWidth >= minWidth && newWidth <= maxWidth) {
+              setSidebarWidth(newWidth);
+              localStorage.setItem('flow-sidebar-width', newWidth.toString());
+            }
+        } else if (isResizingGenie) {
+            const newWidth = window.innerWidth - e.clientX;
+            const minWidth = 300;
+            const maxWidth = 800;
+            if (newWidth >= minWidth && newWidth <= maxWidth) {
+                setGenieWidth(newWidth);
+                localStorage.setItem('flow-genie-width', newWidth.toString());
+            }
         }
       };
 
       const handleMouseUp = () => {
         setIsResizingSidebar(false);
+        setIsResizingGenie(false);
       };
 
-      if (isResizingSidebar) {
+      if (isResizingSidebar || isResizingGenie) {
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
         document.body.style.cursor = 'col-resize';
@@ -514,7 +543,7 @@ const [dialogConfig, setDialogConfig] = useState<{
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
       };
-    }, [isResizingSidebar]);
+    }, [isResizingSidebar, isResizingGenie]);
 
     // Handlers
     function handleDragStart(event: DragStartEvent) {
@@ -798,9 +827,10 @@ const [dialogConfig, setDialogConfig] = useState<{
 
     const performSave = async (location: 'local' | 'cloud') => {
         setIsProcessing(true);
+        setFlowSource(location);
         setProcessingMessage(location === 'cloud' ? 'Uploading to Cloud...' : 'Saving Locally...');
         try {
-            const flow = FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, 1, currentFlowId || undefined, flowDescription);
+            const flow = FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, 1, currentFlowId || undefined, flowDescription, chatHistory);
             
             if (location === 'cloud') {
                 const cloudRes = await FlowStorage.saveCloud(flow);
@@ -939,9 +969,11 @@ const [dialogConfig, setDialogConfig] = useState<{
             if (isTemplate) {
                 setCurrentFlowId(null);
                 setShowOnboarding?.(false);
+                setChatHistory({});
             } else {
                 setCurrentFlowId(id);
                 setIsLoadModalOpen(false);
+                setChatHistory(flow.chat_history || {});
             }
 
         } catch (e) {
@@ -956,7 +988,7 @@ const [dialogConfig, setDialogConfig] = useState<{
          handleLoadFlow(flow as any, true);
     };
 
-    const handleExport = async () => {
+    const handleExport = async (format: 'weblens' | 'playwright-python' | 'playwright-java' | 'selenium-python' | 'selenium-java' = 'weblens') => {
         setIsProcessing(true);
         setProcessingMessage('Exporting Flow...');
         
@@ -969,18 +1001,44 @@ const [dialogConfig, setDialogConfig] = useState<{
                 scenarioSets,
                 1,
                 currentFlowId || undefined,
-                flowDescription
+                flowDescription,
+                chatHistory
             );
 
-            // Encode to .weblens format
-            const { encodeWeblens, downloadWeblens } = await import('../utils/weblensFormat');
-            const weblensContent = await encodeWeblens(flow, flowName, flowDescription);
-            // Trigger download
             const safeFilename = flowName.replace(/[^a-zA-Z0-9_-]/g, '_');
-            downloadWeblens(weblensContent, safeFilename);
 
-            if ((window as any).addToast) {
-                (window as any).addToast('success', `Flow exported as ${safeFilename}.weblens`);
+            if (format === 'weblens') {
+                // Encode to .weblens format
+                const { encodeWeblens, downloadWeblens } = await import('../utils/weblensFormat');
+                const weblensContent = await encodeWeblens(flow, flowName, flowDescription);
+                downloadWeblens(weblensContent, safeFilename);
+
+                if ((window as any).addToast) {
+                    (window as any).addToast('success', `Flow exported as ${safeFilename}.weblens`);
+                }
+            } else {
+                // Generate code (Playwright or Selenium)
+                const { CodeGenerator } = await import('../utils/codeGenerators');
+                const code = CodeGenerator.generate(flow, format);
+                
+                // Determine file extension
+                const extension = format.includes('python') ? 'py' : 'java';
+                const formatLabel = format.replace('-', ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                
+                // Download as text file
+                const blob = new Blob([code], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${safeFilename}.${extension}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                if ((window as any).addToast) {
+                    (window as any).addToast('success', `Flow exported as ${formatLabel} code`);
+                }
             }
         } catch (e) {
             console.error(e);
@@ -1405,7 +1463,7 @@ const [dialogConfig, setDialogConfig] = useState<{
                 {/* Scenario Testing Section */}
                 <div className="pt-4 border-t border-white/10">
                   <ScenarioPanel 
-                    flowJson={FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, schemaVersion)}
+                    flowJson={FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, schemaVersion, undefined, undefined, chatHistory)}
                     onExecutionComplete={(report) => {
                       setSuiteReport(report);
                     }}
@@ -1766,7 +1824,7 @@ const [dialogConfig, setDialogConfig] = useState<{
                 <div className="fixed inset-0 z-[100] bg-black">
                 <ScenarioSuiteDashboard 
                     report={suiteReport}
-                    flowJson={FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, schemaVersion)}
+                    flowJson={FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, schemaVersion, undefined, undefined, chatHistory)}
                     onViewScenario={(runId) => {
                         console.log("View scenario:", runId);
                         onViewScenario?.(runId);
@@ -1795,13 +1853,24 @@ const [dialogConfig, setDialogConfig] = useState<{
 
         {/* Right Sidebar - Genie AI */}
         <div 
-          style={{ width: isGenieOpen ? '320px' : '0px' }}
+          style={{ width: isGenieOpen ? `${genieWidth}px` : '0px' }}
           className={cn(
             "flex flex-col border-l border-zinc-900 bg-black relative z-40 overflow-hidden",
             isGenieOpen ? "opacity-100" : "opacity-0 pointer-events-none",
-            "transition-all duration-300"
+            !isResizingGenie && "transition-all duration-300"
           )}
         >
+          {/* Resize Handle */}
+          {isGenieOpen && (
+              <div 
+                className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize z-[100]"
+                onMouseDown={(e) => {
+                    e.preventDefault();
+                    setIsResizingGenie(true);
+                }}
+              />
+          )}
+
           <GeniePrompt 
                 isSidePanel 
                 onFlowGenerated={(flow) => {
@@ -1810,11 +1879,15 @@ const [dialogConfig, setDialogConfig] = useState<{
                 addToast={(window as any).addToast}
                 variables={activeVariables}
                 onClose={() => setIsGenieOpen(false)}
+                chatHistory={chatHistory}
+                onChatUpdate={setChatHistory}
+                currentFlow={FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, schemaVersion, currentFlowId || undefined, flowDescription, chatHistory)}
+                onRequestPick={onRequestPick}
              />
         </div>
 
         {/* Global Resize Overlay */}
-        {isResizingSidebar && (
+        {(isResizingSidebar || isResizingGenie) && (
             <div className="fixed inset-0 z-[9999] cursor-col-resize" />
         )}
       </div>

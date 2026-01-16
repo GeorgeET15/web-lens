@@ -11,20 +11,73 @@ class AIService:
         return self.provider.is_available()
 
     async def analyze_visual_diff(self, baseline_b64: str, current_b64: str, page_context: str) -> str:
-        """Internal: Analyze visual differences using multimodal AI (Experimental)."""
+        """
+        Analyze visual differences using multimodal AI (Smart Eyes).
+        Intelligently ignores dynamic noise (dates, ads) while flagging structural regressions.
+        """
         if not self.is_enabled():
             return "DECISION: FAIL\nEXPLANATION: AI Saliency Advisor is unavailable."
         
         prompt = f"""
-        Analyze these two screenshots of a web page for meaningful visual regressions.
-        Page Context: {page_context}
+        You are the WebLens "Smart Eyes" visual regression engine. 
+        Compare these two screenshots (Baseline vs. Current) and identify meaningful visual regressions.
         
-        Compare the baseline and the current state. 
-        If there are significant layout shifts, missing elements, or broken styles, respond with 'DECISION: FAIL'.
-        Otherwise, respond with 'DECISION: PASS'.
-        Provide a short 'EXPLANATION:'.
+        CONTEXT: {page_context}
+        
+        STRICT RULES:
+        1. Ignore dynamic content like timestamps, changing ads, or rotating hero images if they don't break the layout.
+        2. Flag critical regressions: missing buttons, broken images, layout shifts (elements overlapping), or CSS failures (missing styles).
+        3. If there is a regression, respond with 'DECISION: FAIL'.
+        4. If the changes are purely cosmetic/dynamic or it's a perfect match, respond with 'DECISION: PASS'.
+        
+        Provide a concise 'EXPLANATION:' focusing on what shifted or went missing.
         """
         return await self.provider.generate_multimodal(prompt, [baseline_b64, current_b64])
+
+    async def generate_smart_assertion(self, logic: str, html_context: str = "") -> Dict[str, Any]:
+        """
+        Convert natural language validation logic into a deterministic block structure.
+        Example: "Check if the cart icon has '3' items" -> verify_text or assert_visible.
+        """
+        if not self.is_enabled():
+            return {"error": "AI Smart Assertions are unavailable."}
+
+        prompt = f"""
+        You are the WebLens Verification Architect.
+        Convert the following validation logic into a precise WebLens block sequence.
+        
+        VALIDATION LOGIC: "{logic}"
+        PAGE CONTEXT (HTML Snippet):
+        {html_context[:4000]} 
+
+        AVAILABLE BLOCK TYPES:
+        - verify_text: {{ "element": ElementRef, "match": {{ "mode": "equals" | "contains", "value": str }} }}
+        - assert_visible: {{ "element": ElementRef }}
+        - verify_page_title: {{ "title": str }}
+        - verify_url: {{ "url_part": str }}
+        
+        STRICT RULES:
+        1. Return ONLY a list of blocks in JSON format.
+        2. Use high-confidence semantic ElementRef (role and name).
+        3. If the logic is complex, break it into multiple verify/assert blocks.
+        
+        RESPONSE FORMAT:
+        ---JSON-START---
+        [ {{ "id": str, "type": str, "params": {{...}}, "next_block": str | null }} ]
+        ---JSON-END---
+        """
+        
+        try:
+            response_text = await self.provider.generate_text(prompt)
+            json_str = response_text
+            if "---JSON-START---" in response_text:
+                json_str = response_text.split("---JSON-START---")[1].split("---JSON-END---")[0].strip()
+            elif "```json" in response_text:
+                json_str = response_text.split("```json")[1].split("```")[0].strip()
+            
+            return json.loads(json_str)
+        except Exception as e:
+            return {"error": str(e)}
 
     async def analyze_block_execution(self, context: Dict[str, Any]) -> str:
         """Analyze a test block execution (success or failure) and provide clean insights."""
@@ -109,139 +162,203 @@ class AIService:
         except Exception as e:
             return {"error": f"Failed to generate healing proposal: {str(e)}"}
 
-    async def generate_flow_from_intent(self, intent: str, history: List[Dict[str, str]] = None, variables: Dict[str, str] = None) -> Dict[str, Any]:
+    async def generate_flow_from_intent(self, intent: str, history: List[Dict[str, str]] = None, variables: Dict[str, str] = None, mode: str = "build", current_flow: Dict[str, Any] = None, picked_element: Dict[str, Any] = None, interaction_map: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Convert a natural language intent into a sequence of WebLens blocks,
-        supporting multi-turn conversation context and variable awareness.
+        Convert a natural language intent into a sequence of WebLens blocks (Build)
+        or provide conversational analysis/help (Ask).
         """
         if not self.is_enabled():
-            return {"error": "AI Flow Generation is unavailable."}
+            return {"error": "AI Service is unavailable."}
+
+        # Deterministic Greeting Handler (Bypass LLM for simple hellos)
+        greetings = {"hi", "hello", "hey", "greetings", "hola", "yo"}
+        cleaned_intent = intent.lower().strip().replace("!", "").replace(".", "")
+        if cleaned_intent in greetings or "hello" in cleaned_intent or "hi " in cleaned_intent:
+             return {"message": "Hello! I'm the Flow Architect. I can help you build test automation flows. Try saying 'Go to google.com' or 'Click the login button'."}
+
+        # Context Extraction from Picked Element
+        screenshot_b64 = None
+        html_context_snippet = ""
+        
+        if picked_element:
+            context = picked_element.get("context", {})
+            html_raw = context.get("html", "")
+            # Truncate HTML to reasonable size (e.g. 15k chars) to avoid token limits while keeping structure
+            if html_raw:
+                html_context_snippet = f"\nPAGE HTML CONTEXT:\n{html_raw[:15000]}...\n"
+            
+            screenshot_b64 = context.get("screenshot")
+            
+            # Enrich intent with specific element details
+            intent += f"\n[System Note: User explicitly picked element '{picked_element.get('name')}' (Role: {picked_element.get('role')}). Focus verification on this element.]"
+
+        # Autonomous Interaction Map Context
+        map_context = ""
+        if interaction_map and interaction_map.get('elements'):
+            map_context = "\nPAGE INTERACTION MAP (Interactive Elements detected on current page):\n"
+            for el in interaction_map.get('elements', []):
+                # Compact format to save tokens
+                name = el.get('name', '')[:50]
+                map_context += f"- [{el['id']}] {el['role'].upper()}: \"{name}\" ({el['tagName']})\n"
+            map_context += "\nINSTRUCTIONS: If the user refers to an element in the map above, use its exact metadata (name, role, tagName) for block parameters. Use this map to avoid asking the user for a manual pick.\n"
 
         history_context = ""
         if history:
             history_context = "\nCONVERSATION HISTORY:\n"
             for msg in history:
-                role = "User" if msg["role"] == "user" else "Genie"
+                role = "User" if msg["role"] == "user" else "Assistant"
                 history_context += f"{role}: {msg['content']}\n"
 
         variable_context = ""
         if variables:
-            variable_context = "\nAVAILABLE VARIABLES (Global & Environment):\n"
+            variable_context = "\nAVAILABLE VARIABLES:\n"
             for k, v in variables.items():
                 variable_context += f"- {k}: {v}\n"
 
-        prompt = r"""
-        You are the WebLens Flow Architect (the "Genie").
-        Convert the following user intent into a valid visual testing flow JSON.
-        {history_context}
-        {variable_context}
-        
-        NEW INTENT:
-        "{intent}"
-        
-        VALID BLOCK TYPES & SCHEMAS:
-        - open_page: {{ "url": str }}
-        - click_element: {{ "element": {{ "role": str, "name": str }} }}
-        - enter_text: {{ "element": {{ "role": str, "name": str }}, "text": str }}
-        - select_option: {{ "element": {{ "role": str, "name": str }}, "option_text": str }}
-        - verify_text: {{ "element": {{ "role": str, "name": str }}, "match": {{ "mode": "equals" | "contains", "value": str }} }}
-        - verify_page_title: {{ "title": str }}
-        - verify_url: {{ "url_part": str }}
-        - verify_page_content: {{ "match": {{ "mode": "contains", "value": str }} }}
-        - scroll_to_element: {{ "element": {{ "role": str, "name": str }} }}
-        - save_text: {{ "element": {{ "role": str, "name": str }}, "save_as": {{ "key": str, "label": str }} }}
-        - refresh_page: {{}}
-        - wait_until_visible: {{ "element": {{ "role": str, "name": str }}, "timeout_seconds": int }}
-        - assert_visible: {{ "element": {{ "role": str, "name": str }} }}
-        - if_condition: {{ 
-             "condition": {{ "kind": "element_visible", "element": {{ "role": str, "name": str }} }},
-             "then_blocks": [str], "else_blocks": [str] 
-          }}
-        - loop_until: {{ 
-             "type": "repeat_until", 
-             "condition": {{ "kind": "element_not_visible", "element": {{ "role": str, "name": str }} }},
-             "body_blocks": [str]
-          }}
-        - delay: {{ "seconds": float }}
-        
-        STRICT RULES:
-        1. Root must have "name", "entry_block" (string ID), and "blocks" (array).
-        2. Every block MUST have "id", "type", and "next_block" (string ID or null).
-        3. No "body" wrapper. Parameters are top-level in the block object.
-        4. "next_block" links blocks in a linear chain.
-        5. branch IDs in if_condition must exist in the "blocks" array.
-        
-        DESIGN GUIDELINES:
-        - VARIABLE USAGE: If a value matches an AVAILABLE VARIABLE name, use the format {{VARIABLE_NAME}}.
-        - EXAMPLE 1:
-          AVAILABLE VARIABLES: {{ "BASE_URL": "google.com" }}
-          INTENT: "Open the base url"
-          CORRECT JSON: {{ "type": "open_page", "url": "{{{{BASE_URL}}}}", ... }}
-        - EXAMPLE 2:
-          AVAILABLE VARIABLES: {{ "USERNAME": "alex" }}
-          INTENT: "Type alex into the login"
-          CORRECT JSON: {{ "type": "enter_text", "text": "{{{{USERNAME}}}}", ... }}
-          
-        - If the user asks to "change", "add", or "modify" the existing flow, use the HISTORY context to provide an UPDATED version.
-        - NEVER return just the delta. Always return the entire block list.
-        - Maintain original IDs from the HISTORY for existing blocks.
-        
-        RESPONSE FORMAT:
-        Return ONLY the JSON. No conversation.
-        JSON MUST BE WRAPPED IN ---JSON-START--- AND ---JSON-END--- markers.
+        flow_context = ""
+        if current_flow:
+            flow_context = "\nCURRENT FLOW CONTEXT:\n"
+            flow_context += f"Flow Name: {current_flow.get('name')}\n"
+            flow_context += f"Description: {current_flow.get('description')}\n"
+            flow_context += "Blocks:\n"
+            for b in current_flow.get('blocks', []):
+                flow_context += f"- Block #{b.get('id')}: {b.get('type')} ({b.get('label')})\n"
+                # Extract params from flattened block structure (frontend spreads params into root)
+                exclude_keys = {'id', 'type', 'label', 'next_block', 'position', 'then_blocks', 'else_blocks', 'body_blocks'}
+                params = {k: v for k, v in b.items() if k not in exclude_keys}
+                if params:
+                    flow_context += f"  Params: {params}\n"
 
-        FINAL REMINDER: Use {{VARIABLE_NAME}} syntax for any variables used.
-        """.format(
-            history_context=history_context,
-            variable_context=variable_context,
-            intent=intent
-        )
+        if mode == "ask":
+            prompt = f"""
+            You are the WebLens Consultant. 
+            Your goal is to help the user understand and debug their current testing flow.
+            
+            {flow_context}
+            {map_context}
+            {variable_context}
+            {history_context}
+            {html_context_snippet}
+            
+            USER QUESTION:
+            "{intent}"
+            
+            RULES:
+            1. You are purely conversational. DO NOT return a flow JSON structure.
+            2. **Context Usage**: You have access to the `CURRENT FLOW CONTEXT`. ONLY reference it or explain it if the user explicitly asks about the flow or if their question directly relates to the current blocks.
+            3. **Greetings**: If the user says "Hello", "Hi", or makes small talk, respond naturally ("Hello! How can I help you with your testing?") WITHOUT summarizing the flow.
+            4. Focus on explaining the current blocks, identifying potential issues, or answering the user's specific questions.
+            5. Use a helpful, professional, and technical tone.
+            6. If the user mentions "block #X", refer to your current flow context to identify it.
+            
+            RESPONSE FORMAT:
+            1. Use proper Markdown formatting for readability:
+               - Use **bold** for emphasis or key terms.
+               - Use `code blocks` or `inline code` for technical details, block IDs, or parameters.
+               - Use bulleted or numbered lists for steps or explanations.
+            2. Special Markers:
+               - Refer to variables using the `{{variable_name}}` syntax when appropriate.
+               - Mention `@verify` when suggesting verification steps.
+            3. Tone: Helpful, technical, and concise.
+            4. Return ONLY the text response. NO markers or JSON.
+            """.strip()
+        else:
+            prompt = r"""
+            You are the WebLens Flow Architect.
+            Convert the following user intent into a valid visual testing flow JSON.
+            {history_context}
+            {variable_context}
+            {flow_context}
+            {html_context_snippet}
+            {map_context}
+            
+            NEW INTENT:
+            "{intent}"
+            
+            VALID BLOCK TYPES & SCHEMAS:
+            - open_page: {{ "url": str }}
+            - click_element: {{ "element": {{ "role": str, "name": str }} }}
+            - enter_text: {{ "element": {{ "role": str, "name": str }}, "text": str }}
+            - select_option: {{ "element": {{ "role": str, "name": str }}, "option_text": str }}
+            - verify_text: {{ "element": {{ "role": str, "name": str }}, "match": {{ "mode": "equals" | "contains", "value": str }} }}
+            - verify_page_title: {{ "title": str }}
+            - verify_url: {{ "url_part": str }}
+            - verify_page_content: {{ "match": {{ "mode": "contains", "value": str }} }}
+            - scroll_to_element: {{ "element": {{ "role": str, "name": str }} }}
+            - save_text: {{ "element": {{ "role": str, "name": str }}, "save_as": {{ "key": str, "label": str }} }}
+            - refresh_page: {{}}
+            - wait_until_visible: {{ "element": {{ "role": str, "name": str }}, "timeout_seconds": int }}
+            - assert_visible: {{ "element": {{ "role": str, "name": str }} }}
+            - if_condition: {{ 
+                 "condition": {{ "kind": "element_visible", "element": {{ "role": str, "name": str }} }},
+                 "then_blocks": [str], "else_blocks": [str] 
+              }}
+            - loop_until: {{ 
+                 "type": "repeat_until", 
+                 "condition": {{ "kind": "element_not_visible", "element": {{ "role": str, "name": str }} }},
+                 "body_blocks": [str]
+              }}
+            - delay: {{ "seconds": float }}
+            
+            STRICT RULES:
+            1. Root must have "name", "entry_block" (string ID), and "blocks" (array).
+            2. Every block MUST have "id", "type", and "next_block" (string ID or null).
+            3. Parameters are top-level in the block object.
+            
+            RESPONSE FORMAT:
+            Option 1 (Flow Generation):
+            - If the user wants to build/modify a flow, return ONLY the JSON wrapped in ---JSON-START--- and ---JSON-END---.
+            
+            Option 2 (Conversation):
+            - If the user says "Hi", "Hello", or asks a clarifying question unrelated to building, return PLAIN TEXT regarding their query. DO NOT generate a dummy flow.
+            - DO NOT return a flow JSON with an empty "blocks" array.
+
+            Option 3 (Client Action Required):
+            - If you need the user to select a specific element on the page (e.g. for a verification or click) but you don't have its context, return ONLY the JSON wrapped in ---JSON-START--- and ---JSON-END---:
+              {{ "action": "pick_element", "message": "A helpful message explaining which element to select." }}
+            - Use this sparingly; only if the intent is clearly about a specific UI element that isn't in your current context.
+            """.format(
+                history_context=history_context,
+                variable_context=variable_context,
+                flow_context=flow_context,
+                intent=intent,
+                html_context_snippet=html_context_snippet,
+                map_context=map_context
+            )
 
         try:
-            response_text = await self.provider.generate_text(prompt)
-            if not response_text:
-                return {"error": "Genie is silent. Please check your AI provider configuration."}
+            if screenshot_b64:
+                response_text = await self.provider.generate_multimodal(prompt, [screenshot_b64])
+            else:
+                response_text = await self.provider.generate_text(prompt)
+            
+            if mode == "ask":
+                return {"message": response_text.strip()}
 
-            json_str = response_text
-            if "---JSON-START---" in response_text and "---JSON-END---" in response_text:
+            # Find the JSON block
+            json_str = ""
+            if "---JSON-START---" in response_text:
                 json_str = response_text.split("---JSON-START---")[1].split("---JSON-END---")[0].strip()
             elif "```json" in response_text:
                 json_str = response_text.split("```json")[1].split("```")[0].strip()
             elif "{" in response_text:
                 json_str = response_text[response_text.find("{"):response_text.rfind("}")+1]
-            else:
-                json_str = response_text.strip()
             
-            # If the response doesn't look like JSON (e.g. just text), return it as a message
-            if "{" not in json_str:
+            if not json_str:
                 return {"message": response_text.strip()}
 
-            # Parse JSON first
-            flow_data = json.loads(json_str)
-
-            # Recursive helper to fix variable references in values only
-            def fix_variables(obj):
-                if isinstance(obj, dict):
-                    return {k: fix_variables(v) for k, v in obj.items()}
-                elif isinstance(obj, list):
-                    return [fix_variables(item) for item in obj]
-                elif isinstance(obj, str):
-                    # Check if string matches a variable name exactly
-                    if variables and obj in variables:
-                        return "{{" + obj + "}}"
-                    return obj
-                return obj
-
-            # safe post-process
-            flow_data = fix_variables(flow_data)
-
-            return flow_data
+            try:
+                data = json.loads(json_str)
+                if data.get("action"):
+                    return data
+                if not data.get("blocks"):
+                    return {"message": "Hello! I'm ready to build. Please describe the test steps you want to create."}
+                return data
+            except json.JSONDecodeError:
+                return {"message": response_text.strip()}
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Genie failure: {str(e)}")
-            # If JSON parsing fails, maybe it's just a text response
-            return {"message": response_text.strip()} if 'response_text' in locals() else {"error": str(e)}
+            logger.error(f"AI Service Error: {e}")
+            return {"error": f"Failed to process intent: {str(e)}"}
 
 # Singleton instance
 ai_service = AIService()

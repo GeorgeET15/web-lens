@@ -64,7 +64,13 @@ export const InspectorModal: React.FC<InspectorModalProps> = ({
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.type === 'picked_element') {
-          const element = data.element;
+          const element = {
+              ...data.element,
+              context: {
+                  html: data.html_context,
+                  screenshot: data.screenshot_context
+              }
+          };
           setLastPickedElement(element);
           
           // Check for capability mismatch

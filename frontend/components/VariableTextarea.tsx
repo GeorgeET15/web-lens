@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Database } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -30,7 +30,7 @@ export function VariableTextarea({
     const [filter, setFilter] = useState('');
     const [cursorPos, setCursorPos] = useState(0);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const overlayRef = useRef<HTMLDivElement>(null);
+
     const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null);
 
     const updateCoords = () => {
@@ -75,6 +75,16 @@ export function VariableTextarea({
         };
     }, [showSuggestions]);
 
+    // Auto-resize
+    useEffect(() => {
+        if (textareaRef.current) {
+            // Reset height to auto to correctly calculate new scrollHeight (shrink if needed)
+            textareaRef.current.style.height = 'auto';
+            // Set new height based on content
+            textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+        }
+    }, [value]);
+
     const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const val = e.target.value;
         const pos = e.target.selectionStart || 0;
@@ -102,55 +112,26 @@ export function VariableTextarea({
         setTimeout(() => textareaRef.current?.focus(), 10);
     };
 
-    // Create highlighted HTML for overlay
-    const highlightedHTML = useMemo(() => {
-        if (!value) return '';
-        
-        // Escape HTML and highlight variables
-        const escaped = value
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/\n/g, '<br/>');
-        
-        // Highlight {{VARIABLE}} patterns - only change color, not weight
-        return escaped.replace(/\{\{([^}]+)\}\}/g, '<span style="color: rgb(129, 140, 248);">{{$1}}</span>');
-    }, [value]);
+    // Shared typography classes
+    const typographyClasses = "font-mono text-sm leading-relaxed whitespace-pre-wrap break-words tracking-normal";
 
     return (
         <div className={cn("relative w-full", showSuggestions && "z-[9999]")}>
-            {/* Syntax highlighting overlay */}
-            <div 
-                ref={overlayRef}
-                className={cn(
-                    "absolute inset-0 pointer-events-none whitespace-pre-wrap break-words overflow-hidden",
-                    className // Keep all classes for font/layout matching
-                )}
-                style={{
-                    color: 'rgb(212, 212, 216)', // zinc-300
-                    backgroundColor: 'transparent',
-                }}
-                dangerouslySetInnerHTML={{ __html: highlightedHTML }}
-            />
-            
-            {/* Actual textarea (transparent text) */}
+            {/* Actual textarea (Visible) */}
             <textarea 
                 ref={textareaRef}
                 value={value}
                 onChange={handleInput}
-                onScroll={(e) => {
-                    if (overlayRef.current) {
-                        overlayRef.current.scrollTop = e.currentTarget.scrollTop;
-                    }
-                }}
+                data-gramm="false" // Disable Grammarly
+                spellCheck="false"
                 onClick={(e) => setCursorPos(e.currentTarget.selectionStart || 0)}
                 onKeyUp={(e) => setCursorPos(e.currentTarget.selectionStart || 0)}
                 placeholder={placeholder}
-                className={cn(className, "relative caret-white")}
-                style={{
-                    color: 'transparent',
-                    WebkitTextFillColor: 'transparent',
-                }}
+                className={cn(
+                    className, // Inherit padding/height from parent
+                    "relative caret-white block w-full text-zinc-100 bg-transparent", // Visible text
+                    typographyClasses
+                )}
                 onBlur={() => {
                     setTimeout(() => setShowSuggestions(false), 200);
                     onBlur?.();

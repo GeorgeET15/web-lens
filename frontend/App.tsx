@@ -63,6 +63,21 @@ function Dashboard() {
     checkViewerMode();
   }, []);
 
+  // Prevent accidental closure if working on a flow
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Simple heuristic: If a flow is loaded (and not just viewing a report), assume potentially unsaved work
+      if (currentFlow && !isViewerMode) {
+        e.preventDefault();
+        e.returnValue = ''; // Standard for prompting
+        return '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [currentFlow, isViewerMode]);
+
   const checkViewerMode = async () => {
     const params = new URLSearchParams(window.location.search);
     const reportId = params.get('report');
@@ -475,7 +490,7 @@ function Dashboard() {
                   </button>
 
                   <FlowMenu 
-                    onExport={() => blockEditorRef.current?.exportFlow()}
+                    onExport={(format) => blockEditorRef.current?.exportFlow(format)}
                     onImport={() => blockEditorRef.current?.triggerImport()}
                   />
                 </div>

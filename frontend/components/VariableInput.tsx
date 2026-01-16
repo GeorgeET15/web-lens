@@ -84,6 +84,16 @@ export function VariableInput({ value, onChange, savedValues, placeholder, class
         const textAfter = value.slice(cursorPos);
         onChange(textBefore + textAfter);
         setShowSuggestions(false);
+        
+        // Fix: Move cursor to end of inserted variable
+        setTimeout(() => {
+            const el = inputRef.current;
+            if (el) {
+                const newPos = textBefore.length;
+                el.setSelectionRange(newPos, newPos);
+                el.focus();
+            }
+        }, 0);
     };
 
     return (

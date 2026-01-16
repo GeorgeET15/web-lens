@@ -147,10 +147,36 @@ export const FlowStorage = {
       const cloudFlows = await res.json();
       // The backend returns the list with 'graph' key
       const found = cloudFlows.find((f: any) => f.id === id);
-      return found ? found.graph : null;
+      if (!found) return null;
+      return {
+        ...found.graph,
+        chat_history: found.chat_history || found.graph?.chat_history || {}
+      };
     } catch (e) {
       console.error('Cloud load failed', e);
       return null;
+    }
+  },
+
+  syncChatToCloud: async (id: string, chatHistory: any): Promise<boolean> => {
+    try {
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      if (!token) return false;
+
+      const res = await fetch(`${API_BASE}/ai/flows/${id}/chat`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ chat_history: chatHistory })
+      });
+
+      return res.ok;
+    } catch (e) {
+      console.error('Chat sync failed', e);
+      return false;
     }
   },
 

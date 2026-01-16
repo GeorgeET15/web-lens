@@ -79,6 +79,7 @@ class SupabaseService:
                 "name": flow_data.get("name", "Untitled Flow"),
                 "description": flow_data.get("description"),
                 "graph": flow_data,
+                "chat_history": flow_data.get("chat_history"),
                 "updated_at": "now()"
             }
             

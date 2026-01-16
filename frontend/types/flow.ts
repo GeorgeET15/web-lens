@@ -33,4 +33,5 @@ export interface FlowGraph {
   blocks: FlowBlock[];
   variables?: Record<string, string>;
   scenario_sets?: ScenarioSet[];
+  chat_history?: Record<string, any>;
 }
