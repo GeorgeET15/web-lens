@@ -5,7 +5,7 @@ import { Sparkles, Send, X, ChevronDown, ChevronUp, Check, Plus, Trash2, Loader2
 import { API_ENDPOINTS } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { VariableTextarea } from '../VariableTextarea';
-import { ConfirmationDialog } from '../ConfirmationDialog';
+import { ClearChatDialog } from '../dialogs/ClearChatDialog';
 
 interface GeniePromptProps {
     onFlowGenerated: (flow: any) => void;
@@ -547,17 +547,13 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
                     </div>
                 </div>
 
-                <ConfirmationDialog 
+                <ClearChatDialog 
                     isOpen={showClearConfirm}
-                    title="Clear Chat History"
-                    message="Are you sure you want to clear the chat history? This action cannot be undone."
-                    confirmLabel="Clear History"
-                    isDestructive={true}
                     onConfirm={() => {
                         setMessages([]);
                         setShowClearConfirm(false);
                     }}
-                    onCancel={() => setShowClearConfirm(false)}
+                    onClose={() => setShowClearConfirm(false)}
                 />
             </div>
         );

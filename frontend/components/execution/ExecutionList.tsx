@@ -9,7 +9,8 @@ import { cn } from '../../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { Skeleton } from '../Skeleton';
 import { supabase } from '../../lib/supabase';
-import { ConfirmationDialog } from '../ConfirmationDialog';
+import { ClearHistoryDialog } from '../dialogs/ClearHistoryDialog';
+import { DeleteExecutionDialog } from '../dialogs/DeleteExecutionDialog';
 
 interface Props {
   onSelect: (runId: string) => void;
@@ -29,18 +30,9 @@ const ExecutionList: React.FC<Props> = ({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
 
-  const [confirmDialog, setConfirmDialog] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    onConfirm: () => void;
-    isDestructive?: boolean;
-  }>({
-    isOpen: false,
-    title: '',
-    message: '',
-    onConfirm: () => {}
-  });
+  const [showClearHistoryDialog, setShowClearHistoryDialog] = useState(false);
+  const [showDeleteExecutionDialog, setShowDeleteExecutionDialog] = useState(false);
+  const [activeDeleteId, setActiveDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRuns();
@@ -67,84 +59,72 @@ const ExecutionList: React.FC<Props> = ({
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent, runId: string) => {
+  const handleDeleteClick = (e: React.MouseEvent, runId: string) => {
     e.stopPropagation();
-    if (deletingId) return;
-
-    setConfirmDialog({
-        isOpen: true,
-        title: 'Delete Execution',
-        message: 'Are you sure you want to delete this execution trace? This cannot be undone.',
-        isDestructive: true,
-        onConfirm: async () => {
-            setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-            try {
-                setDeletingId(runId);
-                
-                const { data: { session } } = await supabase.auth.getSession();
-                const headers: Record<string, string> = {};
-                if (session?.access_token) {
-                    headers['Authorization'] = `Bearer ${session.access_token}`;
-                }
-
-                const res = await fetch(`${API_ENDPOINTS.EXECUTIONS}/${runId}`, {
-                    method: 'DELETE',
-                    headers
-                });
-                
-                if (!res.ok) throw new Error('Failed to delete');
-                
-                // Optimistic update
-                setRuns(prev => prev.filter(r => r.run_id !== runId));
-                (window as any).addToast?.('success', 'Execution trace deleted');
-
-            } catch (err) {
-                console.error('Delete failed:', err);
-                (window as any).addToast?.('error', 'Failed to delete execution trace');
-            } finally {
-                setDeletingId(null);
-            }
-        }
-    });
+    setActiveDeleteId(runId);
+    setShowDeleteExecutionDialog(true);
   };
 
-  const handleClearHistory = async () => {
-    if (isClearing) return;
-
-    setConfirmDialog({
-        isOpen: true,
-        title: 'Clear History',
-        message: 'DANGER: This will permanently delete ALL execution history, including screenshots and logs. This action CANNOT be undone.',
-        isDestructive: true,
-        onConfirm: async () => {
-            setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-            try {
-                setIsClearing(true);
-                
-                const { data: { session } } = await supabase.auth.getSession();
-                const headers: Record<string, string> = {};
-                if (session?.access_token) {
-                    headers['Authorization'] = `Bearer ${session.access_token}`;
-                }
-
-                const res = await fetch(API_ENDPOINTS.EXECUTIONS, {
-                    method: 'DELETE',
-                    headers
-                });
-
-                if (!res.ok) throw new Error('Failed to clear history');
-
-                setRuns([]);
-                (window as any).addToast?.('success', 'Execution history cleared');
-                
-            } catch (err) {
-                console.error('Clear history failed:', err);
-                (window as any).addToast?.('error', 'Failed to clear execution history');
-            } finally {
-                setIsClearing(false);
-            }
+  const onConfirmDeleteExecution = async () => {
+    if (!activeDeleteId) return;
+    setShowDeleteExecutionDialog(false);
+    
+    try {
+        setDeletingId(activeDeleteId);
+        
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers: Record<string, string> = {};
+        if (session?.access_token) {
+            headers['Authorization'] = `Bearer ${session.access_token}`;
         }
-    });
+
+        const res = await fetch(`${API_ENDPOINTS.EXECUTIONS}/${activeDeleteId}`, {
+            method: 'DELETE',
+            headers
+        });
+        
+        if (!res.ok) throw new Error('Failed to delete');
+        
+        // Optimistic update
+        setRuns(prev => prev.filter(r => r.run_id !== activeDeleteId));
+        (window as any).addToast?.('success', 'Execution trace deleted');
+
+    } catch (err) {
+        console.error('Delete failed:', err);
+        (window as any).addToast?.('error', 'Failed to delete execution trace');
+    } finally {
+        setDeletingId(null);
+        setActiveDeleteId(null);
+    }
+  };
+
+  const onConfirmClearHistory = async () => {
+    setShowClearHistoryDialog(false);
+    try {
+        setIsClearing(true);
+        
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers: Record<string, string> = {};
+        if (session?.access_token) {
+            headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        const res = await fetch(API_ENDPOINTS.EXECUTIONS, {
+            method: 'DELETE',
+            headers
+        });
+
+        if (!res.ok) throw new Error('Failed to clear history');
+
+        setRuns([]);
+        (window as any).addToast?.('success', 'Execution history cleared');
+        
+    } catch (err) {
+        console.error('Clear history failed:', err);
+        (window as any).addToast?.('error', 'Failed to clear execution history');
+    } finally {
+        setIsClearing(false);
+    }
   };
 
   const filteredRuns = runs.filter(run => {
@@ -176,7 +156,7 @@ const ExecutionList: React.FC<Props> = ({
         
         {filteredRuns.length > 0 && (
             <button 
-                onClick={handleClearHistory}
+                onClick={() => setShowClearHistoryDialog(true)}
                 disabled={isClearing}
                 className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded border border-rose-500/10 bg-rose-500/5 hover:bg-rose-500/10 hover:border-rose-500/20 text-rose-500/60 hover:text-rose-400 transition-colors text-[9px] font-medium"
             >
@@ -241,7 +221,7 @@ const ExecutionList: React.FC<Props> = ({
                   <div className="absolute right-2 top-3 opacity-0 group-hover:opacity-100 transition-opacity">
                         <div 
                             role="button"
-                            onClick={(e) => handleDelete(e, run.run_id)}
+                            onClick={(e) => handleDeleteClick(e, run.run_id)}
                             className="p-1.5 rounded hover:bg-rose-500/20 text-zinc-600 hover:text-rose-400 transition-colors"
                             title="Delete Trace"
                         >
@@ -297,14 +277,19 @@ const ExecutionList: React.FC<Props> = ({
         )}
       </div>
       
-      <ConfirmationDialog 
-        isOpen={confirmDialog.isOpen}
-        title={confirmDialog.title}
-        message={confirmDialog.message}
-        onConfirm={confirmDialog.onConfirm}
-        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
-        isDestructive={confirmDialog.isDestructive}
-        confirmLabel={confirmDialog.title.includes('Clear') ? 'Clear All' : 'Delete'}
+      <ClearHistoryDialog 
+        isOpen={showClearHistoryDialog}
+        onConfirm={onConfirmClearHistory}
+        onClose={() => setShowClearHistoryDialog(false)}
+      />
+
+      <DeleteExecutionDialog 
+        isOpen={showDeleteExecutionDialog}
+        onConfirm={onConfirmDeleteExecution}
+        onClose={() => {
+            setShowDeleteExecutionDialog(false);
+            setActiveDeleteId(null);
+        }}
       />
     </div>
   );

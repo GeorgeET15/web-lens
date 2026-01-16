@@ -29,7 +29,11 @@ import { supabase } from '../lib/supabase';
 import { Minimap } from './Minimap';
 import { SnapGuides } from './SnapGuides';
 import { FlowTransformer } from '../lib/flow-transformer';
-import { ConfirmationDialog } from '../components/ConfirmationDialog';
+import { SaveFlowDialog } from '../components/dialogs/SaveFlowDialog';
+import { DiscardChangesDialog } from '../components/dialogs/DiscardChangesDialog';
+import { ClearCanvasDialog } from '../components/dialogs/ClearCanvasDialog';
+import { DeleteFlowDialog } from '../components/dialogs/DeleteFlowDialog';
+import { AdvancedDeleteFlowDialog } from '../components/dialogs/AdvancedDeleteFlowDialog';
 import { ScenarioPanel } from '../components/ScenarioPanel';
 import { EditorBlock, BlockType, SavedValue, ScenarioSuiteReport } from './entities';
 import { ScenarioSuiteDashboard } from '../components/execution/ScenarioSuiteDashboard';
@@ -274,25 +278,14 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
     // Block search
     const [blockSearchQuery, setBlockSearchQuery] = useState('');
 
-const [dialogConfig, setDialogConfig] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    cancelLabel?: string;
-    secondaryLabel?: string;
-    tertiaryLabel?: string;
-    onConfirm: () => void;
-    onSecondary?: () => void;
-    onTertiary?: () => void;
-    isDestructive?: boolean;
-    showCancel?: boolean;
-}>({
-    isOpen: false,
-    title: '',
-    message: '',
-    onConfirm: () => {}
-});
+    // --- UI Dialog State ---
+    const [showSaveDialog, setShowSaveDialog] = useState(false);
+    const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+    const [showClearCanvasDialog, setShowClearCanvasDialog] = useState(false);
+    const [showDeleteFlowDialog, setShowDeleteFlowDialog] = useState(false);
+    const [showAdvancedDeleteDialog, setShowAdvancedDeleteDialog] = useState(false);
+    const [activeAdvancedDeleteFlow, setActiveAdvancedDeleteFlow] = useState<any>(null);
+    const [pendingLoadFlow, setPendingLoadFlow] = useState<{flow: FlowGraph, id: string, isTemplate: boolean} | null>(null);
 
     const [activeDragId, setActiveDragId] = useState<string | null>(null);
     const [blockStatuses, setBlockStatuses] = useState<Record<string, 'idle' | 'running' | 'success' | 'failed'>>({});
@@ -806,22 +799,7 @@ const [dialogConfig, setDialogConfig] = useState<{
         const session = await supabase.auth.getSession();
         
         if (session.data.session) {
-            setDialogConfig({
-                isOpen: true,
-                title: 'Save Flow',
-                message: 'Where would you like to save this flow?',
-                confirmLabel: 'Cloud Storage',
-                secondaryLabel: 'Local Storage',
-                cancelLabel: 'Cancel',
-                onConfirm: () => {
-                    performSave('cloud');
-                    setDialogConfig(prev => ({ ...prev, isOpen: false }));
-                },
-                onSecondary: () => {
-                    performSave('local');
-                    setDialogConfig(prev => ({ ...prev, isOpen: false }));
-                }
-            });
+            setShowSaveDialog(true);
         } else {
             performSave('local');
         }
@@ -934,16 +912,8 @@ const [dialogConfig, setDialogConfig] = useState<{
         if (!flow) return;
         
         if (blocks.length > 2) { 
-            setDialogConfig({
-                isOpen: true,
-                title: 'Discard Changes',
-                message: 'Discard current changes and load this flow?',
-                confirmLabel: 'Discard & Load',
-                onConfirm: () => {
-                    performLoad(flow, id, isTemplate);
-                    setDialogConfig(prev => ({ ...prev, isOpen: false }));
-                }
-            });
+            setPendingLoadFlow({ flow, id, isTemplate });
+            setShowDiscardDialog(true);
             return;
         }
 
@@ -1089,25 +1059,17 @@ const [dialogConfig, setDialogConfig] = useState<{
         }
     };
 
-    const resetToNewFlow = (withConfirmation = true) => {
-        const performReset = () => {
-            setBlocks([{ id: `block_${crypto.randomUUID()}`, ...DEFAULT_BLOCKS.open_page }]);
-            setFlowName('My Test Flow');
-            setFlowDescription('');
-            setGlobalVariables([]);
-            setCurrentFlowId(null);
-            setDialogConfig(prev => ({ ...prev, isOpen: false }));
-        };
+    const performReset = () => {
+        setBlocks([{ id: `block_${crypto.randomUUID()}`, ...DEFAULT_BLOCKS.open_page }]);
+        setFlowName('My Test Flow');
+        setFlowDescription('');
+        setGlobalVariables([]);
+        setCurrentFlowId(null);
+    };
 
+    const resetToNewFlow = (withConfirmation = true) => {
         if (withConfirmation) {
-            setDialogConfig({
-                isOpen: true,
-                title: 'New Flow',
-                message: 'Create a new flow? All unsaved changes on the current canvas will be lost.',
-                confirmLabel: 'Create New',
-                isDestructive: true,
-                onConfirm: performReset
-            });
+            setShowClearCanvasDialog(true);
         } else {
             performReset();
         }
@@ -1119,22 +1081,7 @@ const [dialogConfig, setDialogConfig] = useState<{
             return;
         }
         if (currentFlowId) {
-            setDialogConfig({
-                isOpen: true,
-                title: 'Delete Flow',
-                message: `Delete "${flowName}"? This cannot be undone.`,
-                confirmLabel: 'Delete Forever',
-                isDestructive: true,
-                onConfirm: () => {
-                    FlowStorage.delete(currentFlowId);
-                    setCurrentFlowId(null);
-                    setBlocks([{ id: `block_${crypto.randomUUID()}`, ...DEFAULT_BLOCKS.open_page }]);
-                    setFlowName('My Test Flow');
-                    setFlowDescription('');
-                    setGlobalVariables([]);
-                    setDialogConfig(prev => ({ ...prev, isOpen: false }));
-                }
-            });
+            setShowDeleteFlowDialog(true);
         }
     };
 
@@ -1767,36 +1714,8 @@ const [dialogConfig, setDialogConfig] = useState<{
                                     <button 
                                         onClick={async (e) => {
                                             e.stopPropagation();
-                                            setDialogConfig({
-                                                isOpen: true,
-                                                title: 'Delete Flow',
-                                                message: `How would you like to delete "${f.name}"?`,
-                                                confirmLabel: (f as any).sources?.length > 1 ? 'Delete Everywhere' : 'Delete',
-                                                secondaryLabel: (f as any).sources?.includes('cloud') && (f as any).sources?.includes('local') ? 'Delete from Cloud' : undefined,
-                                                tertiaryLabel: (f as any).sources?.includes('cloud') && (f as any).sources?.includes('local') ? 'Delete Locally' : undefined,
-                                                isDestructive: true,
-                                                onConfirm: async () => {
-                                                    const sources = (f as any).sources || [f.source];
-                                                    if (sources.includes('cloud')) {
-                                                        await FlowStorage.deleteCloud(f.id);
-                                                    }
-                                                    if (sources.includes('local')) {
-                                                        FlowStorage.delete(f.id);
-                                                    }
-                                                    setDialogConfig(prev => ({ ...prev, isOpen: false }));
-                                                    await handleOpenLoadModal();
-                                                },
-                                                onSecondary: async () => {
-                                                    await FlowStorage.deleteCloud(f.id);
-                                                    setDialogConfig(prev => ({ ...prev, isOpen: false }));
-                                                    await handleOpenLoadModal();
-                                                },
-                                                onTertiary: async () => {
-                                                    FlowStorage.delete(f.id);
-                                                    setDialogConfig(prev => ({ ...prev, isOpen: false }));
-                                                    await handleOpenLoadModal();
-                                                }
-                                            });
+                                            setActiveAdvancedDeleteFlow(f);
+                                            setShowAdvancedDeleteDialog(true);
                                         }}
                                         className="p-2.5 rounded-lg text-zinc-600 hover:text-rose-500 hover:bg-rose-500/10 transition-all opacity-0 group-hover:opacity-100"
                                     >
@@ -1816,9 +1735,93 @@ const [dialogConfig, setDialogConfig] = useState<{
                 forceOpen={!!showOnboarding}
             />
 
-            <ConfirmationDialog 
-                {...dialogConfig}
-                onCancel={() => setDialogConfig(prev => ({ ...prev, isOpen: false }))}
+            {/* Dialogs */}
+            <SaveFlowDialog 
+                isOpen={showSaveDialog}
+                onClose={() => setShowSaveDialog(false)}
+                onSaveCloud={() => {
+                    performSave('cloud');
+                    setShowSaveDialog(false);
+                }}
+                onSaveLocal={() => {
+                    performSave('local');
+                    setShowSaveDialog(false);
+                }}
+            />
+
+            <DiscardChangesDialog 
+                isOpen={showDiscardDialog}
+                onClose={() => {
+                    setShowDiscardDialog(false);
+                    setPendingLoadFlow(null);
+                }}
+                onConfirm={() => {
+                    if (pendingLoadFlow) {
+                        performLoad(pendingLoadFlow.flow, pendingLoadFlow.id, pendingLoadFlow.isTemplate);
+                    }
+                    setShowDiscardDialog(false);
+                    setPendingLoadFlow(null);
+                }}
+            />
+
+            <ClearCanvasDialog 
+                isOpen={showClearCanvasDialog}
+                onClose={() => setShowClearCanvasDialog(false)}
+                onConfirm={() => {
+                    performReset(); // This is internally defined in resetToNewFlow
+                    setShowClearCanvasDialog(false);
+                }}
+            />
+
+            <AdvancedDeleteFlowDialog 
+                isOpen={showAdvancedDeleteDialog}
+                flowName={activeAdvancedDeleteFlow?.name || ""}
+                hasCloud={activeAdvancedDeleteFlow?.sources?.includes('cloud')}
+                hasLocal={activeAdvancedDeleteFlow?.sources?.includes('local')}
+                onClose={() => {
+                    setShowAdvancedDeleteDialog(false);
+                    setActiveAdvancedDeleteFlow(null);
+                }}
+                onDeleteEverywhere={async () => {
+                    const f = activeAdvancedDeleteFlow;
+                    const sources = f.sources || [f.source];
+                    if (sources.includes('cloud')) await FlowStorage.deleteCloud(f.id);
+                    if (sources.includes('local')) FlowStorage.delete(f.id);
+                    setShowAdvancedDeleteDialog(false);
+                    setActiveAdvancedDeleteFlow(null);
+                    await handleOpenLoadModal();
+                }}
+                onDeleteCloud={async () => {
+                    const f = activeAdvancedDeleteFlow;
+                    await FlowStorage.deleteCloud(f.id);
+                    setShowAdvancedDeleteDialog(false);
+                    setActiveAdvancedDeleteFlow(null);
+                    await handleOpenLoadModal();
+                }}
+                onDeleteLocal={async () => {
+                    const f = activeAdvancedDeleteFlow;
+                    FlowStorage.delete(f.id);
+                    setShowAdvancedDeleteDialog(false);
+                    setActiveAdvancedDeleteFlow(null);
+                    await handleOpenLoadModal();
+                }}
+            />
+
+            <DeleteFlowDialog 
+                isOpen={showDeleteFlowDialog}
+                flowName={flowName}
+                onClose={() => setShowDeleteFlowDialog(false)}
+                onConfirm={() => {
+                    if (currentFlowId) {
+                        FlowStorage.delete(currentFlowId);
+                        setCurrentFlowId(null);
+                        setBlocks([{ id: `block_${crypto.randomUUID()}`, ...DEFAULT_BLOCKS.open_page }]);
+                        setFlowName('My Test Flow');
+                        setFlowDescription('');
+                        setGlobalVariables([]);
+                    }
+                    setShowDeleteFlowDialog(false);
+                }}
             />
 
             {/* Scenario Suite Dashboard Overlay */}
