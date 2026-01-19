@@ -14,10 +14,10 @@ WebLens uses a split-brain architecture to ensure separation of concerns:
 -   **Control Plane (Frontend)**: React + Vite + TypeScript.
     -   *State*: `FlowEditor.tsx` manages the graph using `dnd-kit` for drag-and-drop.
     -   *Streaming*: Real-time updates via EventSource (`/api/status/{run_id}`).
-    -   *Inspector*: Hybrid Protocol. Starts via REST (`POST /start`), updates via WebSocket (`ws://inspector`).
+    -   *Inspector*: **Singleton Service**. Managed via `InspectorService` in backend. Starts via REST, broadcasts updates via WebSocket (`ws://inspector`) to all connected clients.
 -   **Execution Plane (Backend)**: Python + FastAPI + Selenium.
     -   Responsibility: Browser orchestration, block interpretation, AI inference.
-    -   *Strict Rule*: Stateless execution. Each request is an isolated event.
+    -   *Strict Rule*: Stateless execution for flows (isolated instances). The Inspector, however, is a stateful **Singleton** resource shared across the instance.
 
 ### The "Hybrid" Intelligence
 -   **Deterministic Layer**: Selenium WebDriver executes exact commands (`Click`, `Type`).

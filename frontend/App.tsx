@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import type { StreamEvent } from './types/events';
 import { API_ENDPOINTS } from './config/api';
+import { api, ApiError } from './lib/api';
 import { parseError, type EnrichedError } from './lib/error-parser';
 import { FlowEditor, type FlowEditorRef } from './editor/FlowEditor';
 import { InspectorModal } from './components/InspectorModal';
@@ -26,7 +27,7 @@ import { MobileRestricted } from './components/MobileRestricted';
 
 
 function Dashboard() {
-  const { session, user } = useAuth();
+  const { user } = useAuth();
   const [currentFlow, setCurrentFlow] = useState<FlowGraph | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
@@ -86,9 +87,8 @@ function Dashboard() {
       setIsViewerMode(true);
       setIsRunning(false);
       try {
-        const response = await fetch(`${API_ENDPOINTS.BASE_URL}/api/reports/${reportId}`);
-        if (response.ok) {
-           const report = await response.json();
+        const report = await api.get(`${API_ENDPOINTS.BASE_URL}/api/reports/${reportId}`);
+        if (report) {
            setExecutionReport(report);
            setIsExplorerOpen(true);
            setExplorerHeight(window.innerHeight - 56); // Full height minus header
@@ -121,16 +121,8 @@ function Dashboard() {
   const fetchEnvironments = async () => {
     setIsLoadingEnvs(true);
     try {
-      const token = session?.access_token;
-      const resp = await fetch(API_ENDPOINTS.ENVIRONMENTS, {
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        }
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        setEnvironments(data);
-      }
+      const data = await api.get(API_ENDPOINTS.ENVIRONMENTS);
+      setEnvironments(data);
     } catch (err) {
       console.error('Failed to fetch environments:', err);
     } finally {
@@ -140,19 +132,9 @@ function Dashboard() {
 
   const handleAddEnvironment = async (env: Environment) => {
     try {
-      const token = session?.access_token;
-      const resp = await fetch(API_ENDPOINTS.ENVIRONMENTS, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify(env)
-      });
-      if (resp.ok) {
-        fetchEnvironments();
-        addToast('success', 'Environment saved to cloud');
-      }
+      await api.post(API_ENDPOINTS.ENVIRONMENTS, env);
+      fetchEnvironments();
+      addToast('success', 'Environment saved to cloud');
     } catch (err) {
       console.error('Failed to add environment:', err);
       addToast('error', 'Failed to save environment');
@@ -161,18 +143,10 @@ function Dashboard() {
 
   const handleDeleteEnvironment = async (id: string) => {
     try {
-      const token = session?.access_token;
-      const resp = await fetch(`${API_ENDPOINTS.ENVIRONMENTS}/${id}`, {
-        method: 'DELETE',
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        }
-      });
-      if (resp.ok) {
-        if (selectedEnvironmentId === id) setSelectedEnvironmentId('');
-        fetchEnvironments();
-        addToast('success', 'Environment deleted');
-      }
+      await api.fetch(`${API_ENDPOINTS.ENVIRONMENTS}/${id}`, { method: 'DELETE' });
+      if (selectedEnvironmentId === id) setSelectedEnvironmentId('');
+      fetchEnvironments();
+      addToast('success', 'Environment deleted');
     } catch (err) {
       console.error('Failed to delete environment:', err);
       addToast('error', 'Failed to delete environment');
@@ -270,11 +244,8 @@ function Dashboard() {
 
   const fetchExecutionReport = async (runId: string) => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.BASE_URL}/api/executions/${runId}`);
-      if (response.ok) {
-        const report = await response.json();
-        setExecutionReport(report);
-      }
+      const report = await api.get(`${API_ENDPOINTS.BASE_URL}/api/executions/${runId}`);
+      setExecutionReport(report);
     } catch (err) {
       console.error('Failed to fetch execution report:', err);
     }
@@ -323,49 +294,15 @@ function Dashboard() {
 
       const entryBlockId = rootBlock.id;
 
-      const token = session?.access_token;
-
       // Start execution with the FULL flow
-      const response = await fetch(API_ENDPOINTS.EXECUTE, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-             flow: { ...currentFlow, entry_block: entryBlockId },
-             headless: false,
-             variables: currentFlow?.variables || {},
-             environment_id: selectedEnvironmentId || undefined
-        }),
+      const response = await api.post(API_ENDPOINTS.EXECUTE, {
+           flow: { ...currentFlow, entry_block: entryBlockId },
+           headless: false,
+           variables: currentFlow?.variables || {},
+           environment_id: selectedEnvironmentId || undefined
       });
 
-      // Handle validation errors (400 Bad Request)
-      if (!response.ok) {
-        const errorData = await response.json();
-        if (response.status === 400 && errorData.detail) {
-          const detail = errorData.detail;
-          if (detail.validation_errors && Array.isArray(detail.validation_errors)) {
-            const errorMessages = detail.validation_errors.join('\n');
-            const errorTitle = detail.state === 'draft' ? 'Incomplete Flow' : 'Validation Failed';
-            
-            // Set error state
-            setError({
-              title: errorTitle,
-              message: errorMessages,
-              suggestion: 'Please fix the validation errors in the flow editor before running.',
-              category: 'validation' as const,
-              raw: JSON.stringify(detail)
-            });
-
-            setIsRunning(false);
-            return;
-          }
-        }
-        throw new Error('Failed to start execution');
-      }
-
-      const { run_id } = await response.json();
+      const { run_id } = response;
 
       // Successful Start: NOW open the explorer
       setIsExplorerOpen(true);
@@ -386,6 +323,25 @@ function Dashboard() {
       eventSourceRef.current = es;
 
     } catch (err) {
+      // Handle validation errors (400 Bad Request)
+      if (err instanceof ApiError && err.status === 400 && err.data?.detail) {
+        const detail = err.data.detail;
+        if (detail.validation_errors && Array.isArray(detail.validation_errors)) {
+          const errorMessages = detail.validation_errors.join('\n');
+          const errorTitle = detail.state === 'draft' ? 'Incomplete Flow' : 'Validation Failed';
+          
+          setError({
+            title: errorTitle,
+            message: errorMessages,
+            suggestion: 'Please fix the validation errors in the flow editor before running.',
+            category: 'validation' as const,
+            raw: JSON.stringify(detail)
+          });
+          setIsRunning(false);
+          return;
+        }
+      }
+
       setError(parseError(err instanceof Error ? err.message : 'Failed to run test'));
       setIsRunning(false);
     }
@@ -437,7 +393,7 @@ function Dashboard() {
     // Auto-close browser if requested (AI Flow)
     if (pickingOptions.autoClose) {
       try {
-        await fetch(API_ENDPOINTS.INSPECTOR_STOP, { method: 'POST' });
+        await api.post(API_ENDPOINTS.INSPECTOR_STOP, {});
       } catch (e) {
         console.error('Failed to auto-stop inspector:', e);
       }
@@ -458,18 +414,10 @@ function Dashboard() {
 
   const handleAutoLaunchInspector = async (url: string) => {
     try {
-      const resp = await fetch(API_ENDPOINTS.INSPECTOR_START, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      });
-      if (resp.ok) {
-        addToast('success', 'Browser launched automatically.');
-        // Ensure the modal opens so the user can see the live session
-        setIsInspectorOpen(true);
-      } else {
-        throw new Error('Launch failed');
-      }
+      await api.post(API_ENDPOINTS.INSPECTOR_START, { url });
+      addToast('success', 'Browser launched automatically.');
+      // Ensure the modal opens so the user can see the live session
+      setIsInspectorOpen(true);
     } catch (err) {
       console.error('Auto-launch failed:', err);
       addToast('error', 'Browser auto-launch failed.');

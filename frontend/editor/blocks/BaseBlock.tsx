@@ -40,6 +40,7 @@ import {
   Activity,
   Sparkles
 } from 'lucide-react';
+import { api } from '../../lib/api';
 import { EditorBlock, SavedValue, BlockType } from '../entities';
 import { ElementRef } from '../../types/element';
 import { ElementPicker } from '../../components/ElementPicker';
@@ -969,7 +970,7 @@ const BaseBlockContent = memo(function BaseBlockContent({
                                     formData.append('file', file);
 
                                     try {
-                                        const res = await fetch('/api/assets/upload', {
+                                        const res = await api.fetch('/api/assets/upload', {
                                             method: 'POST',
                                             body: formData
                                         });

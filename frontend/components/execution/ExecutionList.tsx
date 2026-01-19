@@ -4,11 +4,11 @@ import {
   Search, Trash2
 } from 'lucide-react';
 import { API_ENDPOINTS } from '../../config/api';
+import { api } from '../../lib/api';
 import { ExecutionSummary } from '../../types/execution';
 import { cn } from '../../lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { Skeleton } from '../Skeleton';
-import { supabase } from '../../lib/supabase';
 import { ClearHistoryDialog } from '../dialogs/ClearHistoryDialog';
 import { DeleteExecutionDialog } from '../dialogs/DeleteExecutionDialog';
 import { useToast } from '../ToastContext';
@@ -50,9 +50,7 @@ const ExecutionList: React.FC<Props> = ({
   const fetchRuns = async (isPolling = false) => {
     try {
       if (!isPolling) setIsLoading(true);
-      const res = await fetch(API_ENDPOINTS.EXECUTIONS); 
-      if (!res.ok) throw new Error('Failed to fetch execution history');
-      const data = await res.json();
+      const data = await api.get(API_ENDPOINTS.EXECUTIONS);
       setRuns(data);
     } catch (err) {
       if (!isPolling) setError(err instanceof Error ? err.message : 'Unknown error');
@@ -74,18 +72,9 @@ const ExecutionList: React.FC<Props> = ({
     try {
         setDeletingId(activeDeleteId);
         
-        const { data: { session } } = await supabase.auth.getSession();
-        const headers: Record<string, string> = {};
-        if (session?.access_token) {
-            headers['Authorization'] = `Bearer ${session.access_token}`;
-        }
-
-        const res = await fetch(`${API_ENDPOINTS.EXECUTIONS}/${activeDeleteId}`, {
-            method: 'DELETE',
-            headers
+        await api.fetch(`${API_ENDPOINTS.EXECUTIONS}/${activeDeleteId}`, {
+            method: 'DELETE'
         });
-        
-        if (!res.ok) throw new Error('Failed to delete');
         
         // Optimistic update
         setRuns(prev => prev.filter(r => r.run_id !== activeDeleteId));
@@ -105,18 +94,9 @@ const ExecutionList: React.FC<Props> = ({
     try {
         setIsClearing(true);
         
-        const { data: { session } } = await supabase.auth.getSession();
-        const headers: Record<string, string> = {};
-        if (session?.access_token) {
-            headers['Authorization'] = `Bearer ${session.access_token}`;
-        }
-
-        const res = await fetch(API_ENDPOINTS.EXECUTIONS, {
-            method: 'DELETE',
-            headers
+        await api.fetch(API_ENDPOINTS.EXECUTIONS, {
+            method: 'DELETE'
         });
-
-        if (!res.ok) throw new Error('Failed to clear history');
 
         setRuns([]);
         addToast('success', 'Execution history cleared');

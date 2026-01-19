@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { Loader2, AlertCircle, Github } from 'lucide-react';
 
 export default function Login() {
@@ -19,28 +20,10 @@ export default function Login() {
 
     try {
       if (isSignUp) {
-        const res = await fetch('http://localhost:8000/api/auth/signup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
-        });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.detail || 'Signup failed');
-        }
+        await api.post('/api/auth/signup', { email, password });
         setMessage('Check your email for the confirmation link!');
       } else {
-        const res = await fetch('http://localhost:8000/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
-        });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.detail || 'Login failed');
-        }
-        
-        const data = await res.json();
+        const data = await api.post('/api/auth/login', { email, password });
         
         // Hydrate Supabase Client Session
         const { error } = await supabase.auth.setSession(data.session);

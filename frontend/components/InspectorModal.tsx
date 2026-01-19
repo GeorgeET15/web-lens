@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, ExternalLink, Target, Loader2, AlertCircle } from 'lucide-react';
 import { API_ENDPOINTS } from '../config/api';
+import { api } from '../lib/api';
 
 import { ElementRef } from '../types/element';
 
@@ -134,13 +135,9 @@ export const InspectorModal: React.FC<InspectorModalProps> = ({
   const startInspector = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(API_ENDPOINTS.INSPECTOR_START, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: contextUrl || 'https://example.com' }),
+      await api.post(API_ENDPOINTS.INSPECTOR_START, {
+        url: contextUrl || 'https://example.com'
       });
-
-      if (!response.ok) throw new Error('Failed to start inspector');
       setInspectorUrl('opened');
       connectWebSocket();
     } catch (error) {
@@ -152,13 +149,9 @@ export const InspectorModal: React.FC<InspectorModalProps> = ({
   const resyncInspector = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(API_ENDPOINTS.INSPECTOR_RESYNC, {
-        method: 'POST',
-      });
-      if (response.ok) {
-          setShowResyncNotice(false);
-          console.log('Inspector resynced successfully');
-      }
+      await api.post(API_ENDPOINTS.INSPECTOR_RESYNC, {});
+      setShowResyncNotice(false);
+      console.log('Inspector resynced successfully');
     } catch (error) {
       console.error('Failed to resync inspector:', error);
     } finally {

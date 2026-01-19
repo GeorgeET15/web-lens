@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { api } from '../lib/api';
 import { X, RefreshCw, Loader2, Globe, Check, AlertTriangle, MousePointer2 } from 'lucide-react';
 
 interface ElementData {
@@ -54,15 +55,9 @@ export function EmbeddedBrowser({ url, isOpen, onClose, onPick }: EmbeddedBrowse
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/inspector/embedded/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: snapshot?.url || url || 'https://georgeemmanuelthomas.dev' })
+      const data = await api.post('/api/inspector/embedded/start', {
+        url: snapshot?.url || url || 'https://georgeemmanuelthomas.dev'
       });
-      
-      if (!res.ok) throw new Error('Failed to load browser');
-      
-      const data = await res.json();
       setSnapshot(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -76,15 +71,10 @@ export function EmbeddedBrowser({ url, isOpen, onClose, onPick }: EmbeddedBrowse
       
       setLoading(true);
       try {
-          const res = await fetch('/api/inspector/embedded/interact', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action, ...params })
+          const data = await api.post('/api/inspector/embedded/interact', {
+              action, ...params
           });
           
-          if (!res.ok) throw new Error('Interaction failed');
-          
-          const data = await res.json();
           setSnapshot(data);
           setSelectedEl(null);
           setHoveredEl(null);

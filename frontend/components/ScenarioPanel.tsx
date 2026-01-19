@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { FileDown, Upload, Play, AlertCircle, Save, Layers, Trash2 } from 'lucide-react';
 import { API_ENDPOINTS } from '../config/api';
+import { api } from '../lib/api';
 import { Scenario, ScenarioSuiteReport } from '../editor/entities';
 import { ExecutionStatusModal } from './execution/ExecutionStatusModal';
-import { useAuth } from '../contexts/AuthContext';
 
 import { FlowGraph, ScenarioSet as CanonicalScenarioSet } from '../types/flow';
 
@@ -18,8 +18,6 @@ export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({
     onExecutionComplete,
     onUpdateFlow 
 }) => {
-    const { session } = useAuth();
-    const token = session?.access_token;
     
     const [scenarios, setScenarios] = useState<Scenario[]>([]);
     const [setName, setSetName] = useState('');
@@ -35,18 +33,15 @@ export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({
         setErrors([]);
         
         try {
-            const response = await fetch(API_ENDPOINTS.SCENARIOS_DOWNLOAD_TEMPLATE, {
+            const response = await api.fetch(API_ENDPOINTS.SCENARIOS_DOWNLOAD_TEMPLATE, {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-                },
-                body: JSON.stringify(flowJson)
+                body: JSON.stringify(flowJson),
+                rawResponse: true
             });
 
             if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || 'Failed to generate template');
+                // Should not happen as api.fetch throws, but keeping for safety if rawResponse behaves differently (it doesn't throw? it DOES throw)
+                // Actually api.fetch DOES throw on !ok even if rawResponse is true.
             }
 
             const blob = await response.blob();
@@ -78,20 +73,13 @@ export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({
             formData.append('csv_file', file);
             formData.append('flow', JSON.stringify(flowJson));
 
-            const response = await fetch(API_ENDPOINTS.SCENARIOS_VALIDATE, {
+            const response = await api.fetch(API_ENDPOINTS.SCENARIOS_VALIDATE, {
                 method: 'POST',
-                headers: {
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-                },
-                body: formData
+                body: formData,
+                isFormData: true
             });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail?.errors?.join(', ') || 'CSV validation failed');
-            }
-
-            const data = await response.json();
+            // api.fetch returns JSON by default
+            const data = response;
             setScenarios(data.scenarios);
 
         } catch (error) {
@@ -109,24 +97,11 @@ export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({
         setErrors([]);
 
         try {
-            const response = await fetch(API_ENDPOINTS.SCENARIOS_EXECUTE, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-                },
-                body: JSON.stringify({
-                    flow: flowJson,
-                    scenarios: scenarios
-                })
+            const data = await api.post(API_ENDPOINTS.SCENARIOS_EXECUTE, {
+                flow: flowJson,
+                scenarios: scenarios
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'Scenario execution failed');
-            }
-
-            const data = await response.json();
             setExecutingSuiteId(data.suite_id);
 
         } catch (error) {
@@ -143,26 +118,15 @@ export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({
         setErrors([]);
         
         try {
-            const response = await fetch(`${API_ENDPOINTS.BASE_URL}/api/flows/update-with-set`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-                },
-                body: JSON.stringify({
-                    flow: flowJson,
-                    set_name: setName,
-                    scenarios: scenarios.map((s: Scenario) => ({
-                        scenario_id: s.scenarioId || `s_${Math.random().toString(36).substr(2, 9)}`,
-                        scenario_name: s.scenarioName,
-                        values: s.values
-                    }))
-                })
+            const updatedFlow = await api.post(`${API_ENDPOINTS.BASE_URL}/api/flows/update-with-set`, {
+                flow: flowJson,
+                set_name: setName,
+                scenarios: scenarios.map((s: Scenario) => ({
+                    scenario_id: s.scenarioId || `s_${Math.random().toString(36).substr(2, 9)}`,
+                    scenario_name: s.scenarioName,
+                    values: s.values
+                }))
             });
-            
-            if (!response.ok) throw new Error('Failed to save scenario set');
-            
-            const updatedFlow = await response.json();
             onUpdateFlow?.(updatedFlow);
             setSetName('');
             

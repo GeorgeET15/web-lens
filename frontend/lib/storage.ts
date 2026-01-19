@@ -1,6 +1,6 @@
 import { FlowGraph } from '../types/flow';
 import { ChatHistory } from '../types/chat';
-import { supabase } from './supabase';
+import { api } from './api';
 
 const STORAGE_KEY = 'antigravity_flows';
 const API_BASE = '/api';
@@ -68,20 +68,7 @@ export const FlowStorage = {
   // --- Cloud Storage (Supabase Proxy) ---
   saveCloud: async (flow: FlowGraph): Promise<{ id: string } | null> => {
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-      
-      const res = await fetch(`${API_BASE}/flows`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ flow })
-      });
-
-      if (!res.ok) throw new Error('Failed to save to cloud');
-      return await res.json();
+      return await api.post(`${API_BASE}/flows`, { flow });
     } catch (e) {
       console.error('Cloud save failed', e);
       return null;
@@ -90,16 +77,7 @@ export const FlowStorage = {
 
   listCloud: async (): Promise<SavedFlowMetadata[]> => {
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-      if (!token) return [];
-
-      const res = await fetch(`${API_BASE}/flows`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!res.ok) return [];
-      const cloudFlows = await res.json();
+      const cloudFlows = await api.get(`${API_BASE}/flows`);
       const usage = FlowStorage.getUsageMap();
       
       return cloudFlows.map((f: { id: string; name: string; updated_at: string; last_run?: string }) => ({
@@ -123,14 +101,7 @@ export const FlowStorage = {
 
   trackUsageCloud: async (id: string): Promise<void> => {
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-      if (!token) return;
-
-      await fetch(`${API_BASE}/usage/track-flow/${id}`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      await api.post(`${API_BASE}/usage/track-flow/${id}`, {});
     } catch (e) {
       console.error('Cloud usage tracking failed', e);
     }
@@ -138,16 +109,7 @@ export const FlowStorage = {
 
   loadCloud: async (id: string): Promise<FlowGraph | null> => {
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-      if (!token) return null;
-
-      const res = await fetch(`${API_BASE}/flows`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!res.ok) return null;
-      const cloudFlows = await res.json();
+      const cloudFlows = await api.get(`${API_BASE}/flows`);
       // The backend returns the list with 'graph' key
       const found = cloudFlows.find((f: { id: string; graph: FlowGraph; chat_history?: ChatHistory }) => f.id === id);
       if (!found) return null;
@@ -163,21 +125,13 @@ export const FlowStorage = {
 
   syncChatToCloud: async (id: string, chatHistory: ChatHistory): Promise<boolean> => {
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-      if (!token) return false;
-
-      console.log(`[FlowStorage] Syncing chat to cloud for flow ${id}`, chatHistory);
-      const res = await fetch(`${API_BASE}/ai/flows/${id}/chat`, {
+      await api.fetch(`${API_BASE}/ai/flows/${id}/chat`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_history: chatHistory })
       });
 
-      return res.ok;
+      return true;
     } catch (e) {
       console.error('Chat sync failed', e);
       return false;
@@ -204,16 +158,10 @@ export const FlowStorage = {
 
   deleteCloud: async (id: string): Promise<boolean> => {
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-      if (!token) return false;
-
-      const res = await fetch(`${API_BASE}/flows/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+      await api.fetch(`${API_BASE}/flows/${id}`, {
+        method: 'DELETE'
       });
-
-      return res.ok;
+      return true;
     } catch (e) {
       console.error('Cloud delete failed', e);
       return false;

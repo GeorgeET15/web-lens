@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { MousePointer2, XCircle, Target, Sparkles } from 'lucide-react';
 import { ElementRef } from '../types/element';
 import { cn } from '../lib/utils';
+import { api } from '../lib/api';
 import { SaveTextGuidance } from './SaveTextGuidance';
 import { AIInsight } from './ai/AIInsight';
 
@@ -90,43 +91,38 @@ export const ElementPicker: React.FC<ElementPickerProps> = ({
     setIsAiLoading(true);
     
     try {
-        const res = await fetch('/api/ai/inspect', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                insight: {
-                    run_id: "draft",
-                    block_id: "draft",
-                    block_type: blockType || "unknown",
-                    intent: {
-                        summary: "Inspecting element for stability",
-                        element: {
-                            role: value?.role || "unknown",
-                            name: value?.name || "unknown",
-                            confidence: value?.confidence || "medium"
-                        }
-                    },
-                    outcome: {
-                        status: "success",
-                        duration_ms: 0,
-                        retries: 0
-                    },
-                    reasoning: {
-                        primary_reason: "User initiated inspection"
-                    },
-                    guidance: [],
-                    evidence: {
-                        screenshots: [],
-                        dom_state: "unstable" // Conservative default for inspection
-                    },
-                    context: {
-                        variables: {}
+        const data = await api.post('/api/ai/inspect', {
+            insight: {
+                run_id: "draft",
+                block_id: "draft",
+                block_type: blockType || "unknown",
+                intent: {
+                    summary: "Inspecting element for stability",
+                    element: {
+                        role: value?.role || "unknown",
+                        name: value?.name || "unknown",
+                        confidence: value?.confidence || "medium"
                     }
                 },
-                query: "What is this element and is it stable?"
-            })
+                outcome: {
+                    status: "success",
+                    duration_ms: 0,
+                    retries: 0
+                },
+                reasoning: {
+                    primary_reason: "User initiated inspection"
+                },
+                guidance: [],
+                evidence: {
+                    screenshots: [],
+                    dom_state: "unstable" // Conservative default for inspection
+                },
+                context: {
+                    variables: {}
+                }
+            },
+            query: "What is this element and is it stable?"
         });
-        const data = await res.json();
         setAiAnswer(data.answer);
     } catch (error) {
         console.error("AI Inspect failed", error);

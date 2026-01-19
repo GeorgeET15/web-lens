@@ -298,11 +298,16 @@ USER QUESTION:
 **STRICT OPERATIONAL RULES**:
 1. **Identity**: You are WebLens AI. If asked "Who created you?", "What is your name?", or similar, respond as WebLens AI, a testing consultant.
 2. **Scope**: You ONLY answer questions related to web testing, Selenium, the WebLens tool, or the provided flow context.
-3. **Rejection Policy**: If the user asks general knowledge questions (e.g., "What is the capital of India?"), personal questions, requests jokes, or any off-topic query, you **MUST politely decline**.
-   - Example Rejection: "I am WebLens AI, specialized in web testing. I cannot answer general knowledge questions. How can I help you with your test flow today?"
+3. **Rejection Policy**: If the user asks general knowledge questions, personal questions, requests jokes, or any off-topic query, you **MUST politely decline**.
 4. **No Flow Generation**: In this mode, you are conversational. DO NOT return flow JSON.
-5. **Greetings**: Professional and focused. "Hello! I am WebLens AI. How can I assist with your testing today?"
-6. **Technicality**: Use a technical, helpful, and concise tone. Reference block IDs (e.g., `block #X`) and variables (`{{{{variable}}}}`) as defined in the context.
+5. **Block Accuracy**: You MUST ONLY refer to blocks by their official WebLens names. NEVER hallucinate names.
+   - Use `enter_text` (NOT type_text or input_text)
+   - Use `click_element` (NOT click_block or tap)
+   - Use `assert_visible` (NOT assert_element_exists)
+   - Use `verify_text` (to check specific content)
+   - Use `open_page` (for navigation)
+6. **Greetings**: Professional and focused. "Hello! I am WebLens AI. How can I assist with your testing today?"
+7. **Technicality**: Use a technical, helpful, and concise tone. Reference block IDs (e.g., `block #X`) and variables (`{{variable}}`) as defined in the context.
 
 RESPONSE FORMAT:
 - Use Markdown: **bold** for keys, `code` for block IDs or parameters.
@@ -378,6 +383,61 @@ RESPONSE FORMAT:
             logger.error(f"AI Service Error: {e}")
             logger.error(traceback.format_exc())
             return {"error": f"Failed to process intent: {str(e)}"}
+
+    async def investigate_run(self, result: Dict[str, Any], flow: Dict[str, Any], ai_config: Dict[str, Any] = None) -> str:
+        """Deep analysis of a single scenario execution."""
+        provider = self.get_provider(ai_config)
+        if not provider.is_available():
+            return "AI Investigation is disabled. Please enable it in **Settings**."
+
+        prompt = f"""
+        You are the WebLens Test Forensic Expert.
+        Analyze this scenario execution and provide a concise 'Review Commentary'.
+        
+        FLOW: {flow.get('name', 'Unnamed')}
+        SCENARIO: {result.get('scenarioName', 'Unnamed')}
+        SUCCESS: {result.get('success')}
+        
+        DETAILED LOGS:
+        {json.dumps(result.get('report', {}), indent=2)}
+        
+        REQUIREMENTS:
+        1. Keep it under 100 words.
+        2. Identify the bottleneck or point of failure if it failed.
+        3. If it passed, highlight the most critical verification step.
+        4. Focus on reliability.
+        """
+        response = await provider.generate_text(prompt)
+        return response
+
+    async def stability_audit(self, reports: List[Dict[str, Any]], ai_config: Dict[str, Any] = None) -> str:
+        """Generate a high-level stability summary for a suite of results."""
+        provider = self.get_provider(ai_config)
+        if not provider.is_available():
+            return "AI Stability Audit is disabled. Please enable it in **Settings**."
+
+        # Simplify reports to keep prompt size manageable
+        summary_data = []
+        for r in reports:
+            summary_data.append({
+                "status": "PASS" if r.get("success", False) else "FAIL",
+                "error": r.get("error", "None")
+            })
+
+        prompt = f"""
+        You are the WebLens Optimization Strategist.
+        Review these scenario results and provide a high-level stability summary.
+        
+        DATA:
+        {json.dumps(summary_data, indent=2)}
+        
+        TASK:
+        Summarize the overall health of this test run. 
+        If there are patterns in failures (e.g., all timed out), call them out.
+        Keep it brief and encouraging.
+        """
+        response = await provider.generate_text(prompt)
+        return response
 
 # Singleton instance
 ai_service = AIService()

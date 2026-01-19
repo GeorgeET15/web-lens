@@ -54,9 +54,10 @@ BACKEND_DIR = Path(__file__).parent
 # Assuming these exist based on file listing:
 from models import FlowGraph, ExecutionResult, BlockType, ConditionKind, FlowState, EnvironmentConfig
 
-from browser_engine import SeleniumEngine, BrowserEngineError
-from selenium.common.exceptions import UnexpectedAlertPresentException
 from interpreter import BlockInterpreter
+
+# Import InspectorService
+from services.inspector_service import inspector_service
 # We need event classes structure roughly match what frontend expects
 # Defining a simple internal event structure for the stream if imports fail, 
 # but better to try reusing existing if possible.
@@ -82,9 +83,10 @@ from ai.ai_service import ai_service
 logger.info(f"AI Capability Status: {'ENABLED' if ai_service.is_enabled() else 'DISABLED (Check .env for API keys)'}")
 
 # Configure CORS
+origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
+    allow_origins=origins,
     allow_credentials=True,  # Required for WebSocket connections
     allow_methods=["*"],
     allow_headers=["*"],
@@ -188,11 +190,6 @@ from execution_manager import (
 
 # --- Routes ---
 
-# --- Inspector State ---
-active_inspector: Optional[SeleniumEngine] = None
-ai_inspector: Optional[SeleniumEngine] = None
-inspector_clients: List[Any] = []  # WebSocket clients (using Any for simplicity)
-
 # --- Routes ---
 
 @app.get("/api/health")
@@ -203,8 +200,8 @@ async def health_check():
 async def get_inspector_status():
     """Return status of both Live and AI inspectors."""
     return {
-        "live": "online" if (active_inspector and active_inspector.driver) else "offline",
-        "ai": "online" if (ai_inspector and ai_inspector.driver) else "offline"
+        "live": "online" if inspector_service.is_running else "offline",
+        "ai": "online" if inspector_service.is_running else "offline" # Simplified for now
     }
 
 from fastapi import Depends, Header
@@ -395,132 +392,44 @@ async def heal_flow_step(
 @app.post("/api/inspector/start")
 async def start_inspector(request: InspectorStartRequest):
     """Start the Live Inspector browser session."""
-    global active_inspector
-    
-    # Close existing if any
-    if active_inspector:
-        try:
-            active_inspector.close()
-        except Exception as e:
-            logger.warning(f"Error closing existing inspector session: {e}")
-        active_inspector = None
-
-    try:
-        # Launch NON-HEADLESS browser
-        active_inspector = SeleniumEngine(headless=False)
-        
-        # URL Fix: Prepend https if missing
-        target_url = request.url
-        if not target_url.startswith("http"):
-            target_url = f"https://{target_url}"
-            
-        logger.info(f"Opening inspector at: {target_url}")
-        active_inspector.open_page(target_url)
-        
-        # Stability delay: Allow initial scripts to settle
-        time.sleep(1.0)
-        
-        # Inject Inspector Script
-        try:
-            inspector_path = BACKEND_DIR / "inspector.js"
-            if not inspector_path.exists():
-                raise FileNotFoundError(f"Missing internal component: {inspector_path}")
-
-            with open(inspector_path, "r") as f:
-                script = f.read()
-                if active_inspector.driver:
-                    # Robust Injection via CDP
-                    try:
-                        active_inspector.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
-                            'source': script
-                        })
-                        logger.info("CDP injection armed for future navigations")
-                    except Exception as cdp_err:
-                        logger.warning(f"CDP injection fallback: {cdp_err}")
-                    
-                    # Immediate injection
-                    active_inspector.driver.execute_script(script)
-                    logger.info("Inspector script injected into current page")
-        except Exception as e:
-            logger.error(f"Failed to inject inspector script: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to inject inspector script: {e}")
-        
-        return {"status": "started", "message": "Inspector launched in new window"}
-    except Exception as e:
-        logger.error(f"Failed to start inspector: {e}")
-        if active_inspector:
-            active_inspector.close()
-            active_inspector = None
-        raise HTTPException(status_code=500, detail=str(e))
+    return await inspector_service.start_inspector(request.url)
 
 @app.post("/api/inspector/stop")
 async def stop_inspector():
-    global active_inspector
-    if active_inspector:
-        active_inspector.close()
-        active_inspector = None
+    await inspector_service.stop_inspector()
     return {"status": "stopped"}
 
 @app.post("/api/inspector/resync")
 async def resync_inspector():
     """Force re-injection of the inspector script into the active browser."""
-    global active_inspector
-    if not active_inspector or not active_inspector.driver:
-        raise HTTPException(status_code=400, detail="Inspector not running")
-    
-    try:
-        # Wait for page to be ready if it's currently navigating
-        try:
-            WebDriverWait(active_inspector.driver, 5).until(
-                lambda d: d.execute_script("return document.readyState") == "complete"
-            )
-        except Exception as e:
-            logger.debug(f"Resync wait timed out (continuing anyway): {e}")
-            
-        with open(BACKEND_DIR / "inspector.js", "r") as f:
-            script = f.read()
-            # 1. Re-setup CDP
-            try:
-                active_inspector.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
-                    'source': script
-                })
-            except Exception as e:
-                logger.debug(f"CDP script injection failed during resync: {e}")
-            
-            # 2. Immediate injection
-            active_inspector.driver.switch_to.default_content()
-            active_inspector.driver.execute_script(script)
-            
-        return {"status": "resynced", "message": "Inspector script re-injected"}
-    except Exception as e:
-        logger.error(f"Resync failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return await inspector_service.resync_inspector()
 
 
 @app.get("/api/ai/scrape-interactions")
 async def ai_scrape_interactions():
     """Execute autonomous scraping in the active browser for AI context."""
-    global active_inspector
-    if not active_inspector or not active_inspector.driver:
+    if not inspector_service.is_running:
         return {"status": "error", "message": "No active browser found for AI inspection", "elements": []}
     
     try:
+        driver = inspector_service.driver
         # Ensure we are on top-level frame
-        active_inspector.driver.switch_to.default_content()
+        driver.switch_to.default_content()
         
         # Check if the AI inspector is already loaded, otherwise force inject
-        is_loaded = active_inspector.driver.execute_script("return typeof window.__scrapeInteractions === 'function'")
+        is_loaded = driver.execute_script("return typeof window.__scrapeInteractions === 'function'")
         if not is_loaded:
             logger.info("AI Inspector logic missing in browser, injecting on-demand...")
+            # Use backend dir from service context if needed, but here we still have BACKEND_DIR from main
             with open(BACKEND_DIR / "ai_inspector.js", "r") as f:
-                active_inspector.driver.execute_script(f.read())
+                driver.execute_script(f.read())
         
         # Execute the scraping function from ai_inspector.js
-        elements = active_inspector.driver.execute_script("return window.__scrapeInteractions ? window.__scrapeInteractions() : []")
+        elements = driver.execute_script("return window.__scrapeInteractions ? window.__scrapeInteractions() : []")
         
         # Add basic page context
-        page_title = active_inspector.driver.title
-        current_url = active_inspector.driver.current_url
+        page_title = driver.title
+        current_url = driver.current_url
         
         return {
             "status": "success",
@@ -535,17 +444,10 @@ async def ai_scrape_interactions():
 
 @app.websocket("/ws/inspector")
 async def inspector_websocket(websocket: WebSocket):
-    global active_inspector 
-    try:
-        await websocket.accept()
-    except Exception as e:
-        logger.error(f"Failed to accept WebSocket connection: {e}")
-        return
-    
-    inspector_clients.append(websocket)
+    await inspector_service.add_client(websocket)
     
     # Send initial status
-    initial_status = "running" if (active_inspector and active_inspector.driver) else "not_running"
+    initial_status = "running" if inspector_service.is_running else "not_running"
     try:
         await websocket.send_json({"type": "inspector_status", "status": initial_status})
     except Exception as e:
@@ -553,41 +455,42 @@ async def inspector_websocket(websocket: WebSocket):
     
     current_mode = "pick"
     last_url = ""
-    if active_inspector and active_inspector.driver:
+    if inspector_service.is_running:
         try:
-            last_url = active_inspector.driver.current_url
+            last_url = inspector_service.driver.current_url
         except Exception as e:
             logger.debug(f"Failed to get initial URL: {e}")
     
     try:
         while True:
             # Poll the browser for picked elements (V1 Implementation)
-            if active_inspector and active_inspector.driver:
+            if inspector_service.is_running:
+                driver = inspector_service.driver
                 try:
                     # 1. Aggressive Check: Ensure window is actually open
-                    if not active_inspector.driver.window_handles:
+                    if not driver.window_handles:
                         raise Exception("No open windows")
                     
                     # 2. Re-injection Fallback: Ensure script is active (with iframe safety)
                     try:
                         # Always ensure we are looking at the top-level document first
-                        active_inspector.driver.switch_to.default_content()
+                        driver.switch_to.default_content()
                         
-                        is_active = active_inspector.driver.execute_script("return !!window.__visualInspectorActive")
+                        is_active = driver.execute_script("return !!window.__visualInspectorActive")
                         if not is_active:
                             logger.info("WebLens: Inspector script lost or page reloaded. Re-injecting...")
                             inspector_path = BACKEND_DIR / "inspector.js"
                             if inspector_path.exists():
                                 with open(inspector_path, "r") as f:
                                     script = f.read()
-                                    active_inspector.driver.execute_script(script)
+                                    driver.execute_script(script)
                                     logger.info("WebLens: Inspector re-injection successful.")
                     except Exception as e:
                         # Page is likely navigating or busy, skip this poll
                         pass
 
                     # 3. Check for element selection
-                    picked_data = active_inspector.driver.execute_script("return window.__lastPicked")
+                    picked_data = driver.execute_script("return window.__lastPicked")
                     
                     if picked_data:
                         # CAPTURE FULL CONTEXT
@@ -595,27 +498,37 @@ async def inspector_websocket(websocket: WebSocket):
                         screenshot_context = ""
                         
                         try:
-                            html_context = active_inspector.driver.page_source
+                            html_context = driver.page_source
                         except Exception as e:
                             logger.error(f"Failed to capture HTML context: {e}")
                             
                         try:
                             # Optimize: Resize for screenshot to reduce payload size if needed, 
                             # but for now we take full window.
-                            screenshot_context = active_inspector.driver.get_screenshot_as_base64()
+                            screenshot_context = driver.get_screenshot_as_base64()
                         except Exception as e:
                             logger.error(f"Failed to capture Screenshot context: {e}")
 
+                        # Use service to broadcast to ALL clients (including self)
+                        # Actually the loop runs PER client? No, this handler runs PER client.
+                        # So we send to THIS client.
+                        # BUT wait, if we have multiple clients, they ALL check for picked element?
+                        # And only ONE will get it because `window.__lastPicked` is cleared?
+                        # This is a race condition in the original code.
+                        # Ideally, a SINGLE background task should poll.
+                        # But for now, I preserved the behavior.
+                        # I will send to SELF.
+                        
                         await websocket.send_json({
                             "type": "picked_element", 
                             "element": picked_data,
                             "html_context": html_context,
                             "screenshot_context": screenshot_context
                         })
-                        active_inspector.driver.execute_script("window.__lastPicked = null")
+                        driver.execute_script("window.__lastPicked = null")
                     
                     # 4. URL Tracking
-                    current_url = active_inspector.driver.current_url
+                    current_url = driver.current_url
                     if current_url != last_url:
                         logger.info(f"Inspector URL changed: {last_url} -> {current_url}")
                         last_url = current_url
@@ -627,23 +540,16 @@ async def inspector_websocket(websocket: WebSocket):
                     # CRITICAL FIX: Only break if the window is TRULY gone.
                     # "Target frame detached" is a common transient error during navigation.
                     try:
-                        handles = active_inspector.driver.window_handles
+                        handles = driver.window_handles
                         if not handles:
                              logger.info("Inspector window closed (no handles). Terminating WebSocket.")
-                             active_inspector = None
-                             try:
-                                 await websocket.send_json({"type": "inspector_status", "status": "stopped"})
-                             except Exception as e:
-                                 logger.debug(f"Failed to send exit status: {e}")
+                             # Notify service to stop?
+                             await inspector_service.stop_inspector()
                              break
                     except Exception as handle_err:
                         # If we can't even get handles, the driver might be dead or window closed
                         logger.info(f"WebDriver unreachable or window closed: {handle_err}. Terminating.")
-                        active_inspector = None
-                        try:
-                            await websocket.send_json({"type": "inspector_status", "status": "stopped"})
-                        except Exception as e:
-                            logger.debug(f"Failed to send exit status (on driver failure): {e}")
+                        await inspector_service.stop_inspector()
                         break
                     
                     # Otherwise, browser might be just busy or navigating, continue polling
@@ -663,8 +569,7 @@ async def inspector_websocket(websocket: WebSocket):
     except Exception as e:
         logger.error(f"Inspector WS error: {e}")
     finally:
-        if websocket in inspector_clients:
-            inspector_clients.remove(websocket)
+        inspector_service.remove_client(websocket)
 
 
 # --- Embedded Inspector Endpoints ---
@@ -680,79 +585,18 @@ class EmbeddedInteractRequest(BaseModel):
 @app.post("/api/inspector/embedded/start")
 async def start_embedded_inspector(request: InspectorStartRequest):
     """Start the Embedded (Headless) Inspector."""
-    global active_inspector
-    
-    # Reuse existing inspector if available
-    try:
-        if not active_inspector:
-            # Launch HEADLESS browser
-            active_inspector = SeleniumEngine(headless=True)
-
-        target_url = request.url
-        if not target_url.startswith("http"):
-            target_url = f"https://{target_url}"
-            
-        # If we are already on the page, just snapshot? 
-        # Or always open_page (which reloads)? 
-        # User might want refresh. open_page handles navigation.
-        active_inspector.open_page(target_url)
-        
-        # Return Snapshot
-        return active_inspector.get_snapshot()
-        
-    except Exception as e:
-        logger.error(f"Failed to start embedded inspector: {e}")
-        if active_inspector:
-            try:
-                active_inspector.close()
-            except Exception as e:
-                logger.debug(f"Error while closing failed inspector: {e}")
-            active_inspector = None
-        raise HTTPException(status_code=500, detail=str(e))
+    return await inspector_service.start_embedded_inspector(request.url)
 
 @app.post("/api/inspector/embedded/interact")
 async def interact_embedded_inspector(request: EmbeddedInteractRequest):
     """Interact with the page and get new snapshot."""
-    global active_inspector
-    
-    if not active_inspector or not active_inspector.driver:
-         raise HTTPException(status_code=400, detail="Inspector not running")
-
-    old_url = active_inspector.driver.current_url
-    try:
-        if request.action == "click":
-            if request.x is not None and request.y is not None:
-                # Translate absolute coordinates to viewport coordinates
-                scroll_x = active_inspector.execute_script("return window.scrollX;")
-                scroll_y = active_inspector.execute_script("return window.scrollY;")
-                vx = request.x - scroll_x
-                vy = request.y - scroll_y
-                
-                # Use elementFromPoint to find the element and click it
-                active_inspector.driver.execute_script(
-                    f"document.elementFromPoint({vx}, {vy}).click()"
-                )
-            await asyncio.sleep(1) # Wait for potential navigation
-            
-        elif request.action == "navigate" and request.url:
-             active_inspector.open_page(request.url)
-
-        snapshot = active_inspector.get_snapshot()
-        new_url = active_inspector.driver.current_url
-        
-        # Navigation Detection
-        if old_url != new_url:
-            snapshot['taf'] = {
-                "trace": ["Page changed"],
-                "analysis": [f"WebLens detected a navigation from {old_url} to {new_url}."],
-                "feedback": ["You can now select elements on this new page or continue browsing."]
-            }
-            
-        return snapshot
-
-    except Exception as e:
-        logger.error(f"Interaction failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return await inspector_service.interact_embedded(
+        action=request.action,
+        url=request.url,
+        selector=request.selector,
+        x=request.x,
+        y=request.y
+    )
 
 @app.post("/api/flow/validate", response_model=FlowStateResponse)
 async def validate_flow(request: FlowExecutionRequest):

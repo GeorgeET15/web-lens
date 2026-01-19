@@ -5,6 +5,7 @@ import { AIInsight } from '../ai/AIInsight';
 import { AIDisclaimer } from '../ai/AIDisclaimer';
 import { cn } from '../../lib/utils';
 import { API_ENDPOINTS } from '../../config/api';
+import { api } from '../../lib/api';
 import { HealingPreviewModal } from './HealingPreviewModal';
 import { useToast } from '../ToastContext';
 
@@ -63,12 +64,7 @@ const InsightPanelDetail: React.FC<Props> = ({ block, flowId, error }) => {
         duration_ms: block.duration_ms
       };
 
-      const res = await fetch('/api/ai/analyze-failure', { // Endpoint handles success too now
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
+      const data = await api.post('/api/ai/analyze-failure', payload);
       setAiSummary(data.summary);
     } catch (err) {
       console.error("AI Analysis failed:", err);
@@ -466,21 +462,15 @@ const InsightPanelDetail: React.FC<Props> = ({ block, flowId, error }) => {
             try {
                 if (!flowId) return;
                 
-                const response = await fetch(`${API_ENDPOINTS.FLOWS}/${flowId}/heal-step`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
+                await api.post(`${API_ENDPOINTS.FLOWS}/${flowId}/heal-step`, {
                         run_id: block.run_id,
                         block_id: block.block_id,
                         attributes: attrs
-                    })
                 });
-
-                if (response.ok) {
-                    setHealingSuccess(true);
-                    addToast('success', 'Step Healed! Flow definition updated.');
-                    setTimeout(() => setHealingSuccess(false), 3000);
-                }
+                
+                setHealingSuccess(true);
+                addToast('success', 'Step Healed! Flow definition updated.');
+                setTimeout(() => setHealingSuccess(false), 3000);
             } catch (e) {
                 console.error("Healing failed", e);
             } finally {

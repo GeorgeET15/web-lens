@@ -6,6 +6,7 @@ import { InsightPanel } from './InsightPanel';
 import { DownloadDropdown } from '../DownloadDropdown';
 import ExecutionList from './ExecutionList';
 import { API_ENDPOINTS } from '../../config/api';
+import { api } from '../../lib/api';
 import { Terminal, History, ChevronLeft, Share2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useToast } from '../ToastContext';
@@ -49,9 +50,8 @@ export const ExecutionExplorer: React.FC<Props> = ({
 
   const handleRunSelect = async (runId: string) => {
     try {
-      const res = await fetch(`${API_ENDPOINTS.BASE_URL}/api/executions/${runId}`);
-      if (res.ok) {
-        const data = await res.json();
+      const data = await api.get(`${API_ENDPOINTS.BASE_URL}/api/executions/${runId}`);
+      if (data) {
         setActiveReport(data);
         setInternalSelectedId(null);
       }

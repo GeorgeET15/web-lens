@@ -115,9 +115,24 @@ async def update_flow_chat(flow_id: str, request: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/analyze-failure")
-@router.post("/analyze-failure")
 async def analyze_failure(request: Dict[str, Any], headers: Request):
     """Analyze a test failure using AI."""
     ai_config = get_ai_config(headers.headers)
     summary = await ai_service.analyze_failure(request, ai_config)
+    return {"summary": summary}
+
+@router.post("/investigate-run")
+async def investigate_run(request: Dict[str, Any], headers: Request):
+    """Deep analysis of a single scenario execution result."""
+    ai_config = get_ai_config(headers.headers)
+    result = request.get("result", {})
+    flow = request.get("flow", {})
+    review = await ai_service.investigate_run(result, flow, ai_config)
+    return {"review": review}
+
+@router.post("/stability-audit")
+async def stability_audit(request: List[Dict[str, Any]], headers: Request):
+    """Generate a high-level stability summary for a suite of results."""
+    ai_config = get_ai_config(headers.headers)
+    summary = await ai_service.stability_audit(request, ai_config)
     return {"summary": summary}

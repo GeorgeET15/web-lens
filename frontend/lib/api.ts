@@ -2,12 +2,21 @@ import { supabase } from './supabase';
 
 interface RequestOptions extends RequestInit {
     headers?: Record<string, string>;
+    rawResponse?: boolean;
+    isFormData?: boolean;
+}
+
+export class ApiError extends Error {
+    constructor(public message: string, public status: number, public data?: any) {
+        super(message);
+        this.name = 'ApiError';
+    }
 }
 
 export const api = {
     async fetch(url: string, options: RequestOptions = {}) {
         const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
+            ...(options.isFormData ? {} : { 'Content-Type': 'application/json' }),
             ...(options.headers || {})
         };
 
@@ -33,9 +42,18 @@ export const api = {
         });
 
         if (!res.ok) {
-            // Special handling for 429 or 500 if needed
             const errorText = await res.text();
-            throw new Error(errorText || `API Error: ${res.status}`);
+            let errorData;
+            try {
+                errorData = JSON.parse(errorText);
+            } catch {
+                errorData = null;
+            }
+            throw new ApiError(errorData?.detail || errorText || `API Error: ${res.status}`, res.status, errorData);
+        }
+
+        if (options.rawResponse) {
+            return res;
         }
 
         return res.json();
