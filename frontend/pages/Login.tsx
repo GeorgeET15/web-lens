@@ -46,8 +46,8 @@ export default function Login() {
         const { error } = await supabase.auth.setSession(data.session);
         if (error) throw error;
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Authentication failed');
     } finally {
       setLoading(false);
     }
@@ -64,8 +64,8 @@ export default function Login() {
         }
       });
       if (error) throw error;
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Social auth failed');
       setSocialLoading(null);
     }
   };

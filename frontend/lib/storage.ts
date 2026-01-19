@@ -1,10 +1,9 @@
 import { FlowGraph } from '../types/flow';
+import { ChatHistory } from '../types/chat';
 import { supabase } from './supabase';
 
 const STORAGE_KEY = 'antigravity_flows';
-// Use window.location for runtime detection (works in packaged app)
-const isDev = window.location.hostname === 'localhost' && window.location.port === '5173';
-const API_BASE = isDev ? 'http://localhost:8000/api' : `${window.location.protocol}//${window.location.host}/api`;
+const API_BASE = '/api';
 
 export interface SavedFlowMetadata {
   id: string;
@@ -103,7 +102,7 @@ export const FlowStorage = {
       const cloudFlows = await res.json();
       const usage = FlowStorage.getUsageMap();
       
-      return cloudFlows.map((f: any) => ({
+      return cloudFlows.map((f: { id: string; name: string; updated_at: string; last_run?: string }) => ({
         id: f.id,
         name: f.name,
         updatedAt: new Date(f.updated_at).getTime(),
@@ -111,7 +110,11 @@ export const FlowStorage = {
         lastUsedAt: usage[f.id] || (f.last_run ? new Date(f.last_run).getTime() : undefined),
         source: 'cloud',
         sources: ['cloud']
-      })).sort((a: any, b: any) => (b.lastUsedAt || b.updatedAt) - (a.lastUsedAt || a.updatedAt));
+      })).sort((a: SavedFlowMetadata, b: SavedFlowMetadata) => {
+        const aTime = a.lastUsedAt || a.updatedAt;
+        const bTime = b.lastUsedAt || b.updatedAt;
+        return bTime - aTime;
+      });
     } catch (e) {
       console.error('Cloud list failed', e);
       return [];
@@ -146,7 +149,7 @@ export const FlowStorage = {
       if (!res.ok) return null;
       const cloudFlows = await res.json();
       // The backend returns the list with 'graph' key
-      const found = cloudFlows.find((f: any) => f.id === id);
+      const found = cloudFlows.find((f: { id: string; graph: FlowGraph; chat_history?: ChatHistory }) => f.id === id);
       if (!found) return null;
       return {
         ...found.graph,
@@ -158,12 +161,13 @@ export const FlowStorage = {
     }
   },
 
-  syncChatToCloud: async (id: string, chatHistory: any): Promise<boolean> => {
+  syncChatToCloud: async (id: string, chatHistory: ChatHistory): Promise<boolean> => {
     try {
       const session = await supabase.auth.getSession();
       const token = session.data.session?.access_token;
       if (!token) return false;
 
+      console.log(`[FlowStorage] Syncing chat to cloud for flow ${id}`, chatHistory);
       const res = await fetch(`${API_BASE}/ai/flows/${id}/chat`, {
         method: 'PATCH',
         headers: {
@@ -177,6 +181,19 @@ export const FlowStorage = {
     } catch (e) {
       console.error('Chat sync failed', e);
       return false;
+    }
+  },
+
+  syncChatLocally: (id: string, chatHistory: ChatHistory) => {
+    try {
+      const all = FlowStorage.getAll();
+      if (all[id]) {
+        all[id].flow.chat_history = chatHistory;
+        all[id].updatedAt = Date.now();
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+      }
+    } catch (e) {
+      console.error('Local chat sync failed', e);
     }
   },
 

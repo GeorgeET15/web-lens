@@ -23,15 +23,15 @@ export const ScenarioSuiteDashboard: React.FC<ScenarioSuiteDashboardProps> = ({
   onBackToEditor,
   flowJson
 }) => {
-  const startedAt = report.startedAt || (report as any).started_at || 0;
-  const finishedAt = report.finishedAt || (report as any).finished_at || 0;
+  const startedAt = report.startedAt || 0;
+  const finishedAt = report.finishedAt || 0;
   const duration = finishedAt ? (finishedAt - startedAt).toFixed(1) : '?';
   const total = report.results?.length || 0;
   const passed = (report.results || []).filter(r => r.success).length;
   const failed = total - passed;
   const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
-  const flowName = report.flowName || (report as any).flow_name || (report as any).file_name || 'Unnamed Flow';
-  const suiteId = report.suiteId || (report as any).suite_id || 'Unknown ID';
+  const flowName = report.flowName || 'Unnamed Flow';
+  const suiteId = report.suiteId || 'Unknown ID';
   const [scenarioInsights, setScenarioInsights] = useState<Record<string, { content: string, isLoading: boolean, isCollapsed: boolean }>>({});
 
   // Role 2: Run Summary Commentary State
@@ -177,13 +177,13 @@ export const ScenarioSuiteDashboard: React.FC<ScenarioSuiteDashboardProps> = ({
         <div className="grid gap-3">
           {(report.results || []).map((result) => (
             <div
-              key={result.runId || (result as any).run_id}
+              key={result.runId}
               className="group w-full p-4 rounded-lg bg-zinc-900/50 border border-white/5 hover:border-white/30 transition-all text-left"
             >
               <div className="flex items-center justify-between">
                 <div 
                   className="flex items-center gap-4 cursor-pointer flex-1"
-                  onClick={() => onViewScenario(result.runId || (result as any).run_id)}
+                  onClick={() => onViewScenario(result.runId)}
                 >
                   <div className={`p-2 rounded-full ${result.success ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`}>
                     {result.success ? (
@@ -194,21 +194,21 @@ export const ScenarioSuiteDashboard: React.FC<ScenarioSuiteDashboardProps> = ({
                   </div>
                   <div>
                     <div className="text-[11px] font-black uppercase tracking-wider group-hover:text-white transition-colors">
-                      {result.scenarioName || (result as any).scenario_name}
+                      {result.scenarioName}
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-[9px] text-zinc-500">
                       <span className="flex items-center gap-1 uppercase font-bold tracking-widest">
                         <Clock className="w-3 h-3" />
                         {(() => {
-                          const rReport = result.report || (result as any).report;
+                          const rReport = result.report;
                           if (!rReport) return '0.0s';
-                          const start = rReport.started_at || rReport.startedAt || 0;
-                          const end = rReport.finished_at || rReport.finishedAt || 0;
+                          const start = rReport.started_at || 0;
+                          const end = rReport.finished_at || 0;
                           return (end - start).toFixed(1);
                         })()}s
                       </span>
                       <span className="text-zinc-700">|</span>
-                      <span className="opacity-50 font-medium">#{(result.runId || (result as any).run_id || '').split('_').pop() || 'ID'}</span>
+                      <span className="opacity-50 font-medium font-mono text-[8px]">#{(result.runId).split('_').pop() || 'ID'}</span>
                     </div>
                   </div>
                 </div>
@@ -221,19 +221,19 @@ export const ScenarioSuiteDashboard: React.FC<ScenarioSuiteDashboardProps> = ({
                     }}
                     className={cn(
                       "flex items-center gap-2 px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all border",
-                      scenarioInsights[result.runId || (result as any).run_id] && !scenarioInsights[result.runId || (result as any).run_id].isCollapsed
+                      scenarioInsights[result.runId] && !scenarioInsights[result.runId].isCollapsed
                         ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/30"
                         : "bg-indigo-500/10 text-indigo-400 border-indigo-500/20 hover:bg-indigo-500/20"
                     )}
                   >
-                    {scenarioInsights[result.runId || (result as any).run_id]?.isLoading ? (
+                    {scenarioInsights[result.runId]?.isLoading ? (
                       <Sparkles className="w-3 h-3 animate-spin" />
-                    ) : scenarioInsights[result.runId || (result as any).run_id] && !scenarioInsights[result.runId || (result as any).run_id].isCollapsed ? (
+                    ) : scenarioInsights[result.runId] && !scenarioInsights[result.runId].isCollapsed ? (
                       <ChevronUp className="w-4 h-4" />
                     ) : (
                       <Sparkles className="w-3 h-3" />
                     )}
-                    {scenarioInsights[result.runId || (result as any).run_id] && !scenarioInsights[result.runId || (result as any).run_id].isCollapsed ? 'Collapse' : 'Review Commentary'}
+                    {scenarioInsights[result.runId] && !scenarioInsights[result.runId].isCollapsed ? 'Collapse' : 'Review Commentary'}
                   </button>
                   {!result.success && (
                     <span className="text-[8px] font-black uppercase tracking-tighter px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
@@ -244,12 +244,12 @@ export const ScenarioSuiteDashboard: React.FC<ScenarioSuiteDashboardProps> = ({
               </div>
 
               {/* Inline AI Insight */}
-              {scenarioInsights[result.runId || (result as any).run_id] && !scenarioInsights[result.runId || (result as any).run_id].isCollapsed && (
+              {scenarioInsights[result.runId] && !scenarioInsights[result.runId].isCollapsed && (
                 <div className="mt-4 border-t border-white/5 pt-4 animate-in slide-in-from-top-2 duration-300">
                   <AIInsight
                     type="inspection"
-                    content={scenarioInsights[result.runId || (result as any).run_id].content}
-                    isLoading={scenarioInsights[result.runId || (result as any).run_id].isLoading}
+                    content={scenarioInsights[result.runId].content}
+                    isLoading={scenarioInsights[result.runId].isLoading}
                     isCollapsible={false}
                     roleLabel="AI Commentary (Non-Authoritative)"
                   />

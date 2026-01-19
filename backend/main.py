@@ -96,8 +96,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     try:
         body = await request.body()
         logger.debug(f"Request body: {body}")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to read request body for diagnostic: {e}")
         
     # Fix: Pydantic v2 errors contain non-serializable 'ctx' objects (Exceptions)
     # We must remove them before returning JSON
@@ -218,11 +218,14 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Optio
         token = authorization.replace("Bearer ", "")
         from database import db
         if not db.is_enabled() or not db.client:
+            logger.warning("Auth failed: DB or client not enabled")
             return None
             
         user = db.client.auth.get_user(token)
-        if user and user.user:
+        if user and hasattr(user, 'user') and user.user:
             return user.user.id
+        elif user and hasattr(user, 'id'):
+            return user.id
     except Exception as e:
         logger.error(f"Auth validation failed: {e}")
         
@@ -398,8 +401,8 @@ async def start_inspector(request: InspectorStartRequest):
     if active_inspector:
         try:
             active_inspector.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Error closing existing inspector session: {e}")
         active_inspector = None
 
     try:
@@ -411,24 +414,33 @@ async def start_inspector(request: InspectorStartRequest):
         if not target_url.startswith("http"):
             target_url = f"https://{target_url}"
             
+        logger.info(f"Opening inspector at: {target_url}")
         active_inspector.open_page(target_url)
         
-        # Inject Inspector Script matches "inspector.js" in the same directory
+        # Stability delay: Allow initial scripts to settle
+        time.sleep(1.0)
+        
+        # Inject Inspector Script
         try:
-            with open(BACKEND_DIR / "inspector.js", "r") as f:
+            inspector_path = BACKEND_DIR / "inspector.js"
+            if not inspector_path.exists():
+                raise FileNotFoundError(f"Missing internal component: {inspector_path}")
+
+            with open(inspector_path, "r") as f:
                 script = f.read()
                 if active_inspector.driver:
-                    # Robust Injection: Use CDP to ensure it runs on every new page
+                    # Robust Injection via CDP
                     try:
                         active_inspector.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
                             'source': script
                         })
-                        logger.info("CDP injection setup for inspector")
+                        logger.info("CDP injection armed for future navigations")
                     except Exception as cdp_err:
-                        logger.warning(f"CDP injection failed (driver may not support it): {cdp_err}")
+                        logger.warning(f"CDP injection fallback: {cdp_err}")
                     
-                    # Also inject into the current page immediately
+                    # Immediate injection
                     active_inspector.driver.execute_script(script)
+                    logger.info("Inspector script injected into current page")
         except Exception as e:
             logger.error(f"Failed to inject inspector script: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to inject inspector script: {e}")
@@ -462,8 +474,8 @@ async def resync_inspector():
             WebDriverWait(active_inspector.driver, 5).until(
                 lambda d: d.execute_script("return document.readyState") == "complete"
             )
-        except:
-            pass # Continue anyway if wait times out
+        except Exception as e:
+            logger.debug(f"Resync wait timed out (continuing anyway): {e}")
             
         with open(BACKEND_DIR / "inspector.js", "r") as f:
             script = f.read()
@@ -472,7 +484,8 @@ async def resync_inspector():
                 active_inspector.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
                     'source': script
                 })
-            except: pass
+            except Exception as e:
+                logger.debug(f"CDP script injection failed during resync: {e}")
             
             # 2. Immediate injection
             active_inspector.driver.switch_to.default_content()
@@ -535,15 +548,16 @@ async def inspector_websocket(websocket: WebSocket):
     initial_status = "running" if (active_inspector and active_inspector.driver) else "not_running"
     try:
         await websocket.send_json({"type": "inspector_status", "status": initial_status})
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to send initial status to inspector: {e}")
     
     current_mode = "pick"
     last_url = ""
     if active_inspector and active_inspector.driver:
         try:
             last_url = active_inspector.driver.current_url
-        except: pass
+        except Exception as e:
+            logger.debug(f"Failed to get initial URL: {e}")
     
     try:
         while True:
@@ -561,16 +575,13 @@ async def inspector_websocket(websocket: WebSocket):
                         
                         is_active = active_inspector.driver.execute_script("return !!window.__visualInspectorActive")
                         if not is_active:
-                            logger.info("Inspector script missing. Re-injecting from WebSocket loop.")
-                            with open(BACKEND_DIR / "inspector.js", "r") as f:
-                                script = f.read()
-                                # We also re-setup CDP just in case it was lost during a crash/reload
-                                try:
-                                    active_inspector.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
-                                        'source': script
-                                    })
-                                except: pass
-                                active_inspector.driver.execute_script(script)
+                            logger.info("WebLens: Inspector script lost or page reloaded. Re-injecting...")
+                            inspector_path = BACKEND_DIR / "inspector.js"
+                            if inspector_path.exists():
+                                with open(inspector_path, "r") as f:
+                                    script = f.read()
+                                    active_inspector.driver.execute_script(script)
+                                    logger.info("WebLens: Inspector re-injection successful.")
                     except Exception as e:
                         # Page is likely navigating or busy, skip this poll
                         pass
@@ -622,20 +633,22 @@ async def inspector_websocket(websocket: WebSocket):
                              active_inspector = None
                              try:
                                  await websocket.send_json({"type": "inspector_status", "status": "stopped"})
-                             except: pass
+                             except Exception as e:
+                                 logger.debug(f"Failed to send exit status: {e}")
                              break
-                    except Exception:
+                    except Exception as handle_err:
                         # If we can't even get handles, the driver might be dead or window closed
-                        logger.info("WebDriver unreachable or window closed. Terminating.")
+                        logger.info(f"WebDriver unreachable or window closed: {handle_err}. Terminating.")
                         active_inspector = None
                         try:
                             await websocket.send_json({"type": "inspector_status", "status": "stopped"})
-                        except: pass
+                        except Exception as e:
+                            logger.debug(f"Failed to send exit status (on driver failure): {e}")
                         break
                     
                     # Otherwise, browser might be just busy or navigating, continue polling
                     logger.debug(f"Transient inspector error during poll: {e}")
-                    pass
+                    continue
             
             # Check for incoming messages (e.g. "stop") with timeout to allow polling loop
             try:
@@ -643,7 +656,8 @@ async def inspector_websocket(websocket: WebSocket):
                 # Handle commands if any
             except asyncio.TimeoutError:
                 continue
-            except Exception:
+            except Exception as e:
+                logger.error(f"WebSocket receive error in inspector loop: {e}")
                 break
                 
     except Exception as e:
@@ -691,8 +705,8 @@ async def start_embedded_inspector(request: InspectorStartRequest):
         if active_inspector:
             try:
                 active_inspector.close()
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Error while closing failed inspector: {e}")
             active_inspector = None
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1323,7 +1337,8 @@ async def download_report_html(run_id: str):
     try:
         report = await get_execution_report(run_id)
         flow_name_slug = report.get('flow_name', 'untitled').replace(' ', '_').lower()
-    except: pass
+    except Exception as e:
+        logger.debug(f"Failed to fetch execution report for slug: {e}")
 
     if html_path.exists():
         try:
@@ -1390,7 +1405,8 @@ async def list_executions(user_id: Optional[str] = Depends(get_current_user)):
                         "finished_at": data.get("finished_at"),
                         "success": data.get("success")
                     }
-            except:
+            except Exception as e:
+                logger.warning(f"Failed to load execution record: {e}")
                 continue
                 
     # 2. Load from Supabase (if authenticated)

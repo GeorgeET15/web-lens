@@ -11,6 +11,7 @@ import { Skeleton } from '../Skeleton';
 import { supabase } from '../../lib/supabase';
 import { ClearHistoryDialog } from '../dialogs/ClearHistoryDialog';
 import { DeleteExecutionDialog } from '../dialogs/DeleteExecutionDialog';
+import { useToast } from '../ToastContext';
 
 interface Props {
   onSelect: (runId: string) => void;
@@ -23,6 +24,7 @@ const ExecutionList: React.FC<Props> = ({
   selectedRunId,
   className 
 }) => {
+  const { addToast } = useToast();
   const [runs, setRuns] = useState<ExecutionSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,11 +89,11 @@ const ExecutionList: React.FC<Props> = ({
         
         // Optimistic update
         setRuns(prev => prev.filter(r => r.run_id !== activeDeleteId));
-        (window as any).addToast?.('success', 'Execution trace deleted');
+        addToast('success', 'Execution trace deleted');
 
     } catch (err) {
         console.error('Delete failed:', err);
-        (window as any).addToast?.('error', 'Failed to delete execution trace');
+        addToast('error', 'Failed to delete execution trace');
     } finally {
         setDeletingId(null);
         setActiveDeleteId(null);
@@ -117,11 +119,11 @@ const ExecutionList: React.FC<Props> = ({
         if (!res.ok) throw new Error('Failed to clear history');
 
         setRuns([]);
-        (window as any).addToast?.('success', 'Execution history cleared');
+        addToast('success', 'Execution history cleared');
         
     } catch (err) {
         console.error('Clear history failed:', err);
-        (window as any).addToast?.('error', 'Failed to clear execution history');
+        addToast('error', 'Failed to clear execution history');
     } finally {
         setIsClearing(false);
     }

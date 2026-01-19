@@ -15,6 +15,7 @@ import base64
 import asyncio
 import httpx
 import json
+import logging
 from pathlib import Path
 from PIL import Image, ImageChops, ImageStat
 from models import (
@@ -52,6 +53,9 @@ from ai.ai_service import ai_service
 from structural_visual_service import structural_visual_service
 
 
+logger = logging.getLogger(__name__)
+
+
 class InterpreterContext:
     """Maintains execution state during flow execution."""
     
@@ -63,6 +67,7 @@ class InterpreterContext:
         self.executed_blocks: List[str] = []
         self.logs: List[str] = []
         self.saved_values: Dict[str, str] = initial_variables or {}  # Stores extracted text values and initial variables
+        self.pending_blocks: List[str] = [] # Stack for iterative execution
         
         # TAF Buffers for the current block
         self.current_taf = {"trace": [], "analysis": [], "feedback": []}
@@ -87,7 +92,7 @@ class InterpreterContext:
         self.logs.append(message)
         self.emit_taf("trace", message)
         # Ensure log message is visible in terminal for developer/user tracking
-        print(f"  {message}", flush=True)
+        logger.info(f"  {message}")
 
     def emit_taf(self, channel: str, message: str) -> None:
         """Centralized TAF emitter."""
@@ -146,8 +151,8 @@ class BlockInterpreter:
         # Sync HUD inventory on first interpolate if needed (or we can do it in execute_flow)
         try:
             self.engine.update_hud_inventory(self.context.saved_values)
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to update HUD inventory: {e}")
 
         import re
         # Find all placeholders like {{var}}
@@ -188,37 +193,8 @@ class BlockInterpreter:
             # Normalizing mean of differences across R, G, B channels
             return sum(stat.mean) / (3 * 255.0)
         except Exception as e:
-            print(f"Pixel diff calculation failed: {e}")
+            logger.error(f"Pixel diff calculation failed: {e}")
             return 1.0 # Fail safe to AI check
-        """
-        Replace {{variable_name}} placeholders with actual values from context.
-        """
-        if not text or not self.context:
-            return text or ""
-        
-        # Sync HUD inventory on first interpolate if needed (or we can do it in execute_flow)
-        try:
-            self.engine.update_hud_inventory(self.context.saved_values)
-        except:
-            pass
-
-        import re
-        # Find all placeholders like {{var}}
-        placeholders = re.findall(r'\{\{(.*?)\}\}', text)
-        result = text
-        for p in placeholders:
-            key = p.strip()
-            if key in self.context.saved_values:
-                # Use a specific replace that avoids infinite loops if var contains {{...}}
-                # though realistically that shouldn't happen here
-                result = result.replace(f'{{{{{p}}}}}', str(self.context.saved_values[key]))
-            else:
-                # STRICT MODE: Fail loudly on missing variables
-                raise VariableMissingError(
-                    key=key,
-                    available_keys=list(self.context.saved_values.keys())
-                )
-        return result
 
     def _resolve_with_confidence(self, element_ref: ElementRef, timeout: Optional[float] = None) -> Any:
         """
@@ -303,8 +279,8 @@ class BlockInterpreter:
                     self.context.current_block_candidates = candidates
                 
                 return handle
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Fast-path element resolution failed (harmless): {e}")
 
         # 2. Deterministic Smart Wait (Phase 2): Wait for page to settle/animations
         self.context.emit_taf("trace", "SmartWait: Waiting for page stability before resolution...")
@@ -420,8 +396,9 @@ class BlockInterpreter:
         """
         try:
             capabilities = self.engine.get_element_capabilities(handle)
-        except Exception:
-            # Fallback for engine ambiguity or error - do not block
+        except Exception as e:
+            # Fallback for engine ambiguity or error - do not block but log it
+            logger.debug(f"Could not determine capabilities for element {element_name}: {e}")
             return
 
         if not capabilities.get(required_capability, False):
@@ -472,7 +449,15 @@ class BlockInterpreter:
         self.context.log(f"Starting flow: {flow.name}")
         
         try:
-            self._execute_block(flow.entry_block, flow)
+            # 1. Initialize Stack with entry block
+            self.context.pending_blocks = [flow.entry_block]
+            
+            # 2. Main Execution Loop (Iterative)
+            while self.context.pending_blocks:
+                current_id = self.context.pending_blocks.pop(0)
+                if current_id:
+                    self._run_single_block(current_id, flow)
+            
             self.context.report.finished_at = time.time()
             self.context.report.duration_ms = (self.context.report.finished_at - self.context.report.started_at) * 1000
             self.context.report.success = True
@@ -488,8 +473,8 @@ class BlockInterpreter:
             screenshot = None
             try:
                 screenshot = self.engine.take_screenshot()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to capture failure screenshot: {e}")
             
             self.context.log(f" Action Failed: {e.intent} -> {e.reason}")
             
@@ -547,8 +532,8 @@ class BlockInterpreter:
             screenshot = None
             try:
                 screenshot = self.engine.take_screenshot()
-            except Exception:
-                pass  # Screenshot capture failed, continue without it
+            except Exception as ss_err:
+                logger.debug(f"Fallback screenshot capture failed: {ss_err}")
             
             self.context.log(f" Error: {e.message}")
             
@@ -594,8 +579,8 @@ class BlockInterpreter:
             screenshot = None
             try:
                 screenshot = self.engine.take_screenshot()
-            except Exception:
-                pass
+            except Exception as se:
+                logger.warning(f"Failed to capture result screenshot: {se}")
             
             error_msg = f"Unexpected error during execution: {str(e)}"
             self.context.log(f" {error_msg}")
@@ -752,21 +737,18 @@ class BlockInterpreter:
             elif isinstance(block, VisualVerifyBlock):
                 return "Performing Semantic Visual Verification"
             return f"Executing {block.type}..."
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Failed to generate intent sentence for HUD: {e}")
             return f"Executing {block.type}..."
     
-    def _execute_block(self, block_id: Optional[str], flow: FlowGraph) -> None:
-        """Execute a single block and follow to next block."""
-        if block_id is None:
-            print("--- Reached end of flow", flush=True)
-            return
-        
+    def _run_single_block(self, block_id: str, flow: FlowGraph) -> None:
+        """Execute a single block step-by-step and manage the iterative stack."""
         block = flow.get_block_by_id(block_id)
         if block is None:
             raise ValueError(f"Block '{block_id}' not found in flow")
         
         self.context.mark_executed(block_id)
-        print(f"--- Executing: {block.type} [{block_id}]", flush=True)
+        logger.info(f"--- Executing: {block.type} [{block_id}]")
         
         # Start Trace components
         start_time = time.time()
@@ -782,8 +764,8 @@ class BlockInterpreter:
             # Log to Browser HUD
             try:
                 self.engine.log_hud(msg)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"HUD logging failed: {e}")
 
         # Reset TAF and score for new block
         self.context.flush_taf()
@@ -806,11 +788,11 @@ class BlockInterpreter:
             elif isinstance(block, IfConditionBlock):
                 status = "success"
                 self._execute_if_condition(block, flow)
-                return  # IfConditionBlock handles next_block
+                # IfConditionBlock handles its own stack updates
             elif isinstance(block, RepeatUntilBlock):
                 status = "success"
                 self._execute_repeat_until(block, flow)
-                return  # RepeatUntilBlock handles next_block
+                # RepeatUntilBlock handles its own stack updates
             elif isinstance(block, DelayBlock):
                 self._execute_delay(block)
             elif isinstance(block, RefreshPageBlock):
@@ -868,11 +850,18 @@ class BlockInterpreter:
             else:
                 raise ValueError(f"Unknown block type: {type(block)}")
             
+            # Linear Flow Handling: If not a branch, push next_block
+            if not isinstance(block, (IfConditionBlock, RepeatUntilBlock)):
+                if block.next_block:
+                    self.context.pending_blocks.insert(0, block.next_block)
+                else:
+                    logger.debug(f"Block {block_id} has no next_block. Flow complete.")
+
             status = "success"
 
         except Exception as e:
             status = "failed"
-            print(f"DEBUG: Block [{block_id}] FAILED with exception: {e}", flush=True)
+            logger.error(f"DEBUG: Block [{block_id}] FAILED with exception: {e}")
             import traceback
             traceback.print_exc()
             raise e
@@ -886,8 +875,9 @@ class BlockInterpreter:
             if status in ["success", "failed"]:
                 try:
                     screenshot = self.engine.take_screenshot()
-                except:
+                except Exception as e:
                     self.context.emit_taf("feedback", "Step visual capture unavailable")
+                    logger.debug(f"Failed to capture completion screenshot: {e}")
 
             # Create and Record Execution Block
             execution_record = BlockExecution(
@@ -921,16 +911,8 @@ class BlockInterpreter:
             # CLEAR BROWSER HUD
             try:
                 self.engine.hide_hud_intent()
-            except:
-                pass
-
-        # Continue to next block
-        next_id = block.next_block
-        if next_id:
-            print(f"DEBUG: Transitioning from {block_id} -> {next_id}", flush=True)
-            self._execute_block(next_id, flow)
-        else:
-            print(f"DEBUG: Block {block_id} has no next_block. Flow complete.", flush=True)
+            except Exception as e:
+                logger.debug(f"Failed to hide HUD intent: {e}")
     
     def _execute_open_page(self, block: OpenPageBlock) -> None:
         """Execute the Open Page block."""
@@ -981,6 +963,7 @@ class BlockInterpreter:
                 outcome_desc = "Navigated to search URL"
             elif role in ["close", "dismiss"] and current_url == pre_url:
                 # Close *shouldn't* navigate usually? Or maybe back?
+                # Intentional pass as this is a valid outcome for a 'close' intent.
                 pass
         
         # 2. Check UI State (Heuristic Signal)
@@ -1007,8 +990,8 @@ class BlockInterpreter:
                         verified = True
                         outcome_desc = "Navigation menu is visible"
 
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Structural verification UI check failed: {e}")
 
         # Result Logic
         if verified:
@@ -1126,62 +1109,58 @@ class BlockInterpreter:
         """Execute IF_CONDITION block with semantic condition evaluation."""
         desc = self._describe_condition(block.condition)
         
-        # Evaluate condition
+        # 1. Evaluate condition
         condition_result = self._evaluate_condition(block.condition)
         
-        # Emit TAF
+        # 2. Emit TAF
         kind_val = block.condition.kind.value if hasattr(block.condition.kind, 'value') else block.condition.kind
         taf = TAFRegistry.if_condition(kind_val, condition_result)
         for channel, msgs in taf.items():
             for msg in msgs:
                 self.context.emit_taf(channel, msg)
         
-        # Execute appropriate branch
+        # 3. Handle Stack Iteratively
+        # Join point (next_block) MUST be pushed first so it runs last
+        if block.next_block:
+            self.context.pending_blocks.insert(0, block.next_block)
+            
+        # Then push the chosen branch (it will run first)
         if condition_result and block.then_blocks:
-            # Only start the first block; recursion handles the chain
-            self._execute_block(block.then_blocks[0], flow)
+            self.context.pending_blocks.insert(0, block.then_blocks[0])
         elif not condition_result and block.else_blocks:
-            # Only start the first block; recursion handles the chain
-            self._execute_block(block.else_blocks[0], flow)
-        
-        # Continue to next block
-        self._execute_block(block.next_block, flow)
+            self.context.pending_blocks.insert(0, block.else_blocks[0])
     
     def _execute_repeat_until(self, block: RepeatUntilBlock, flow: FlowGraph) -> None:
-        """Execute REPEAT_UNTIL block with loop safety and event emissions."""
-        desc = self._describe_condition(block.condition)
+        """Execute REPEAT_UNTIL block with iterative loop management."""
         
-        iteration = 0
-        while iteration < block.max_iterations:
-            iteration += 1
-            
-            # Execute loop body
-            if block.body_blocks:
-                # Only start the first block; recursion handles the chain
-                self._execute_block(block.body_blocks[0], flow)
-            
-            # Check condition after iteration
-            condition_result = self._evaluate_condition(block.condition)
-            
-            # Emit TAF
-            kind_val = block.condition.kind.value if hasattr(block.condition.kind, 'value') else block.condition.kind
-            taf = TAFRegistry.repeat_loop(kind_val, condition_result, iteration)
-            for channel, msgs in taf.items():
-                for msg in msgs:
-                    self.context.emit_taf(channel, msg)
-            
-            if condition_result:
-                break
+        # 1. Evaluate condition
+        condition_result = self._evaluate_condition(block.condition)
+        
+        # 2. Emit TAF
+        kind_val = block.condition.kind.value if hasattr(block.condition.kind, 'value') else block.condition.kind
+        taf = TAFRegistry.repeat_loop(kind_val, condition_result, self.context.loop_counters.get(block.id, 0))
+        for channel, msgs in taf.items():
+            for msg in msgs:
+                self.context.emit_taf(channel, msg)
+        
+        if condition_result:
+            # Finished! Continue to next block outside loop
+            if block.next_block:
+                self.context.pending_blocks.insert(0, block.next_block)
         else:
-            # Max iterations reached without condition being met
-            error_msg = f"Condition was never satisfied after {block.max_iterations} attempts: {desc}"
-            raise BrowserEngineError(
-                error_msg,
-                technical_details=f"Loop safety limit reached: {block.max_iterations} iterations"
-            )
-        
-        # Continue to next block
-        self._execute_block(block.next_block, flow)
+            # Not finished! Check safety limit
+            counter = self.context.loop_counters.get(block.id, 0)
+            if counter >= block.max_iterations:
+                self.context.log(f" Safety limit reached ({block.max_iterations} iterations). Breaking loop.")
+                if block.next_block:
+                    self.context.pending_blocks.insert(0, block.next_block)
+            else:
+                self.context.loop_counters[block.id] = counter + 1
+                # Re-enqueue loop itself THEN the body
+                # The body runs first, then the loop Re-evaluates
+                self.context.pending_blocks.insert(0, block.id)
+                if block.body_blocks:
+                    self.context.pending_blocks.insert(0, block.body_blocks[0])
 
 
     def _execute_delay(self, block: DelayBlock) -> None:
@@ -1297,8 +1276,8 @@ class BlockInterpreter:
              # Sync HUD Inventory
              try:
                  self.engine.update_hud_inventory(self.context.saved_values)
-             except:
-                 pass
+             except Exception as e:
+                 logger.debug(f"HUD logging failed: {e}")
 
              # Also expose as evidence for the report/explorer
              self.context.current_evidence = { "text": text, "label": block.save_as.label, "key": block.save_as.key }
@@ -1456,8 +1435,8 @@ class BlockInterpreter:
             try:
                 new_traffic = self.engine.get_network_traffic()
                 all_traffic.extend(new_traffic)
-            except BrowserEngineError:
-                pass
+            except Exception as e:
+                logger.debug(f"HUD logging failed: {e}")
 
             # 2. Check for matches in ALL captured traffic
             matches = []
@@ -1626,12 +1605,15 @@ class BlockInterpreter:
             end = metrics.get('loadEventEnd', 0)
             if not end:
                 # Page load might not be complete or 'loadEventEnd' is 0
-                # Fallback to domComplete? or wait?
-                # For now assume if 0 it's not done, but we can't wait here nicely without async loop
-                # Just use domComplete if available
-                end = metrics.get('domComplete', 0)
+                # Fallback to domComplete -> domInteractive
+                end = metrics.get('domComplete') or metrics.get('domInteractive') or 0
                 
-            duration = end - start
+            if not end or not start:
+                # If we still lack timing data, we can't calculate duration
+                self.context.log(" Warning: Incomplete performance timing data. Using 0ms fallback.")
+                duration = 0
+            else:
+                duration = end - start
             
         elif block.metric == PerformanceMetric.DOM_INTERACTIVE:
              start = metrics.get('navigationStart', 0)
@@ -1718,13 +1700,13 @@ class BlockInterpreter:
                 self.context.emit_taf(channel, msg)
         
         if not found:
-             print(f"DEBUG: verify_page_content Failed ('{expected}')")
+             logger.debug(f"verify_page_content Failed ('{expected}')")
              raise VerificationMismatchError(
                  intent="Verifying Page Content",
                  expected=f"Content containing '{expected}'",
                  actual="Text not found on page"
              )
-        print(f"DEBUG: verify_page_content Success ('{expected}')")
+        logger.debug(f"verify_page_content Success ('{expected}')")
 
 
 
@@ -1793,6 +1775,12 @@ class BlockInterpreter:
         if not baseline_b64:
              self.context.log(f" Baseline {block.baseline_id} not found. Skipping comparison.")
              return
+
+        self.context.current_evidence = {
+            "baseline": baseline_b64,
+            "current": current_screenshot,
+            "structure": current_structure
+        }
 
         # 1. Pixel Diff
         px_diff = self._get_pixel_diff(baseline_b64, current_screenshot)

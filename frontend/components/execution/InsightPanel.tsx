@@ -1,23 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { BlockExecution } from '../../types/execution';
+import { BlockExecution, ExecutionReport } from '../../types/execution';
 import { ChevronDown, ChevronRight, Camera, Info, ShieldCheck, Activity, Brain, Loader2, Target, Database, Copy, Check, Sparkles, HeartPulse, Settings2 } from 'lucide-react';
 import { AIInsight } from '../ai/AIInsight';
 import { AIDisclaimer } from '../ai/AIDisclaimer';
 import { cn } from '../../lib/utils';
 import { API_ENDPOINTS } from '../../config/api';
 import { HealingPreviewModal } from './HealingPreviewModal';
+import { useToast } from '../ToastContext';
 
 interface Props {
   block?: BlockExecution;
   flowId?: string;
-  error?: {
-    type: string;
-    message: string;
-    related_block_id?: string;
-  };
+  error?: ExecutionReport['error'];
 }
 
 const InsightPanelDetail: React.FC<Props> = ({ block, flowId, error }) => {
+  const { addToast } = useToast();
   const [showTechnical, setShowTechnical] = useState(false);
   const [aiSummary, setAiSummary] = useState<string>("");
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -54,12 +52,12 @@ const InsightPanelDetail: React.FC<Props> = ({ block, flowId, error }) => {
         trace: block.taf.trace,
         analysis: block.taf.analysis,
         // Only include global error context if this specific block is the one that failed
-        error: isRelatedError ? {
+        error: isRelatedError && error ? {
           type: error.type,
           message: error.message,
-          intent: (error as any).intent,
-          reason: (error as any).reason,
-          suggestion: (error as any).suggestion || (error as any).guidance
+          intent: error.intent,
+          reason: error.reason,
+          suggestion: error.suggestion || error.guidance
         } : null,
         confidence: block.confidence_score,
         duration_ms: block.duration_ms
@@ -107,7 +105,7 @@ const InsightPanelDetail: React.FC<Props> = ({ block, flowId, error }) => {
             </h3>
           </div>
           <span className="text-[10px] font-mono text-zinc-600 tabular-nums">
-            {((block as any).duration_ms || 0) / 1000}s
+            {(block.duration_ms || 0) / 1000}s
           </span>
         </div>
         <div className="text-[13px] text-zinc-200 font-medium leading-relaxed italic flex items-center gap-2">
@@ -182,7 +180,7 @@ const InsightPanelDetail: React.FC<Props> = ({ block, flowId, error }) => {
                     className="w-full py-3 rounded-xl border border-indigo-500/20 bg-indigo-500/5 flex items-center justify-center gap-2 group hover:bg-indigo-500/10 transition-all active:scale-98"
                 >
                     <Sparkles className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Ask Genie for Summary</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Ask WebLens AI for Summary</span>
                 </button>
             )}
             
@@ -241,16 +239,16 @@ const InsightPanelDetail: React.FC<Props> = ({ block, flowId, error }) => {
                             <span className="text-[9px] font-black uppercase tracking-widest">Analysis Detail</span>
                         </div>
                         
-                        {showFailureDetail && (
+                        {showFailureDetail && error && (
                            <div className="bg-rose-500/5 border border-rose-500/20 rounded-xl p-4 space-y-4">
-                              {(error as any).intent ? (
+                              {error.intent ? (
                                   <>
                                       <div>
                                           <div className="flex items-center gap-2 text-rose-400 mb-1">
                                               <Target className="w-3.5 h-3.5" />
                                               <span className="text-[9px] font-black uppercase tracking-widest">Intent</span>
                                           </div>
-                                          <p className="text-[12px] text-zinc-300 leading-relaxed">{(error as any).intent}</p>
+                                          <p className="text-[12px] text-zinc-300 leading-relaxed">{error.intent}</p>
                                       </div>
 
                                        <div>
@@ -258,7 +256,7 @@ const InsightPanelDetail: React.FC<Props> = ({ block, flowId, error }) => {
                                               <Info className="w-3.5 h-3.5" />
                                               <span className="text-[9px] font-black uppercase tracking-widest">Reason</span>
                                           </div>
-                                          <p className="text-[12px] text-zinc-300 leading-relaxed font-medium">{(error as any).reason}</p>
+                                          <p className="text-[12px] text-zinc-300 leading-relaxed font-medium">{error.reason}</p>
                                       </div>
                                   </>
                               ) : (
@@ -353,37 +351,64 @@ const InsightPanelDetail: React.FC<Props> = ({ block, flowId, error }) => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 opacity-40">
               <Camera className="w-3.5 h-3.5 text-zinc-400" />
-              <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">Visual Evidence</h4>
+              <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-zinc-500">
+                {block.block_type === 'visual_verify' ? 'Visual Comparison' : 'Visual Evidence'}
+              </h4>
             </div>
-            <span className="text-[9px] font-mono text-zinc-700">T+{Math.round((block as any).duration_ms || 0)}ms</span>
+            <span className="text-[9px] font-mono text-zinc-700">T+{Math.round(block.duration_ms || 0)}ms</span>
           </div>
           
-          <div className="relative group/evidence overflow-hidden rounded-xl border border-white/5 bg-zinc-950">
-            {block.screenshot ? (
-              <img 
-                src={block.screenshot} 
-                className="w-full h-auto object-cover opacity-90 group-hover/evidence:opacity-100 transition-opacity"
-                alt="Evidence"
-              />
-            ) : (
-              <div className="aspect-video flex items-center justify-center text-zinc-700 italic text-[11px]">
-                No snapshot available
+          {block.block_type === 'visual_verify' && block.tier_2_evidence?.baseline && block.tier_2_evidence?.current ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider pl-1">Baseline</span>
+                <div className="relative rounded-xl border border-white/5 bg-zinc-950 overflow-hidden group/baseline">
+                    <img 
+                      src={block.tier_2_evidence.baseline.startsWith('data:') ? block.tier_2_evidence.baseline : `data:image/png;base64,${block.tier_2_evidence.baseline}`}
+                      className="w-full h-auto object-cover opacity-80 group-hover/baseline:opacity-100 transition-opacity"
+                      alt="Baseline"
+                    />
+                </div>
               </div>
-            )}
-            
-            {/* Minimal retry hint if exists */}
-            {block.taf.analysis.some(a => a.toLowerCase().includes('retry')) && (
-               <div className="absolute top-3 right-3 px-2 py-1 bg-black/80 backdrop-blur-xl border border-white/10 rounded flex items-center gap-1.5 ring-1 ring-white/5">
-                  <div className="w-1 h-1 rounded-full bg-indigo-500 animate-pulse" />
-                  <button 
-                    onClick={() => setShowTechnical(true)}
-                    className="text-[8px] font-black text-white/50 hover:text-white uppercase tracking-tighter transition-colors"
-                  >
-                    View attempts
-                  </button>
-               </div>
-            )}
-          </div>
+              <div className="space-y-1.5">
+                <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider pl-1">Actual</span>
+                <div className="relative rounded-xl border border-white/5 bg-zinc-950 overflow-hidden group/actual">
+                    <img 
+                      src={block.tier_2_evidence.current.startsWith('data:') ? block.tier_2_evidence.current : `data:image/png;base64,${block.tier_2_evidence.current}`}
+                      className="w-full h-auto object-cover opacity-80 group-hover/actual:opacity-100 transition-opacity"
+                      alt="Actual"
+                    />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="relative group/evidence overflow-hidden rounded-xl border border-white/5 bg-zinc-950">
+                {block.screenshot ? (
+                <img 
+                    src={block.screenshot} 
+                    className="w-full h-auto object-cover opacity-90 group-hover/evidence:opacity-100 transition-opacity"
+                    alt="Evidence"
+                />
+                ) : (
+                <div className="aspect-video flex items-center justify-center text-zinc-700 italic text-[11px]">
+                    No snapshot available
+                </div>
+                )}
+                
+                {/* Minimal retry hint if exists */}
+                {block.taf.analysis.some(a => a.toLowerCase().includes('retry')) && (
+                <div className="absolute top-3 right-3 px-2 py-1 bg-black/80 backdrop-blur-xl border border-white/10 rounded flex items-center gap-1.5 ring-1 ring-white/5">
+                    <div className="w-1 h-1 rounded-full bg-indigo-500 animate-pulse" />
+                    <button 
+                        onClick={() => setShowTechnical(true)}
+                        className="text-[8px] font-black text-white/50 hover:text-white uppercase tracking-tighter transition-colors"
+                    >
+                        View attempts
+                    </button>
+                </div>
+                )}
+            </div>
+          )}
         </div>
 
         {/* TIER 3.5 — DATA EVIDENCE (EVIDENCE) */}
@@ -453,7 +478,7 @@ const InsightPanelDetail: React.FC<Props> = ({ block, flowId, error }) => {
 
                 if (response.ok) {
                     setHealingSuccess(true);
-                    if ((window as any).addToast) (window as any).addToast('success', 'Step Healed! Flow definition updated.');
+                    addToast('success', 'Step Healed! Flow definition updated.');
                     setTimeout(() => setHealingSuccess(false), 3000);
                 }
             } catch (e) {

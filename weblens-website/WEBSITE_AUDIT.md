@@ -65,7 +65,7 @@ $ ./weblens
 - v1.2.0 (Q1_2025 - DEVELOPMENT): Lists "Flow Translator (AI Drafts)" and "Stability Advisor (AI Analysis)"
 
 **Issue**: These AI features are **already implemented** in v1.0.0:
-- ✅ Genie AI (Flow Translator) - already working
+- ✅ WebLens AI (Flow Translator) - already working
 - ✅ AI Healing/Analysis - already implemented
 - ✅ Headless execution - already supported
 
@@ -109,7 +109,7 @@ The following features exist in the app but aren't documented on the website:
 
 ### 8. **"Non-Goals" Section May Be Confusing** (Docs.tsx, Line 102)
 **Current**: Lists "AI-driven decision making during execution" as a non-goal
-**Issue**: This might confuse users since you DO have AI features (Genie, healing)
+**Issue**: This might confuse users since you DO have AI features (WebLens AI, healing)
 **Clarification Needed**: Explain that AI is used for:
 - ✅ Pre-execution (flow generation)
 - ✅ Post-execution (failure analysis)

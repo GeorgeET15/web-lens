@@ -8,13 +8,14 @@ import { API_ENDPOINTS } from './config/api';
 import { parseError, type EnrichedError } from './lib/error-parser';
 import { FlowEditor, type FlowEditorRef } from './editor/FlowEditor';
 import { InspectorModal } from './components/InspectorModal';
-import type { FlowGraph } from './types/flow';
+import { FlowGraph, FlowBlock } from './types/flow';
+import { ElementRef } from './types/element';
 import { type TimelineEvent } from './components/ExecutionLog';
 import { ExecutionExplorer } from './components/execution/ExecutionExplorer';
 import { ExecutionReport } from './types/execution';
 import { Environment } from './types/environment';
 import { EnvironmentManager } from './components/EnvironmentManager';
-import { ToastContainer, type ToastType } from './components/Toast';
+import { ToastProvider, useToast } from './components/ToastContext';
 import { CustomDropdown } from './components/CustomDropdown';
 import { FlowMenu } from './components/FlowMenu';
 import { clsx } from 'clsx';
@@ -28,10 +29,11 @@ function Dashboard() {
   const { session, user } = useAuth();
   const [currentFlow, setCurrentFlow] = useState<FlowGraph | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [error, setError] = useState<EnrichedError | null>(null);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
-  const [pickingCallback, setPickingCallback] = useState<((element: any) => void) | null>(null);
+  const [pickingCallback, setPickingCallback] = useState<((element: ElementRef) => void) | null>(null);
   const [activePickingBlockType, setActivePickingBlockType] = useState<string | null>(null);
   const [executionReport, setExecutionReport] = useState<ExecutionReport | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
@@ -44,7 +46,6 @@ function Dashboard() {
   const [isLoadingEnvs, setIsLoadingEnvs] = useState(false);
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<string>('');
   const [isEnvManagerOpen, setIsEnvManagerOpen] = useState(false);
-  const [toasts, setToasts] = useState<any[]>([]);
   const [isViewerMode, setIsViewerMode] = useState(false);
 
   
@@ -178,20 +179,9 @@ function Dashboard() {
     }
   };
 
-  const addToast = (type: ToastType, message: string) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    setToasts(prev => [...prev, { id, type, message }]);
-  };
+  const { addToast } = useToast();
 
-  // Expose addToast globally for the share button
-  useEffect(() => {
-    (window as any).addToast = addToast;
-    return () => { delete (window as any).addToast; };
-  }, []);
-
-  const removeToast = (id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  };
+  // Sync Selection: Scroll Canvas when block is selected (e.g. from explorer)
 
   // Sync Selection: Scroll Canvas when block is selected (e.g. from explorer)
   useEffect(() => {
@@ -212,7 +202,15 @@ function Dashboard() {
       }
       
       if (data.type === 'block_execution') {
-        const payload = data.data as any;
+        const payload = data.data as { 
+            suite_id?: string; 
+            status: string; 
+            block_id: string; 
+            type: string; 
+            message: string; 
+            screenshot?: string; 
+            taf?: any;
+        };
         const timestamp = new Date().toISOString();
         const severity = payload.status === 'failed' ? 'error' : 
                          payload.status === 'success' ? 'success' : 'info';
@@ -248,7 +246,7 @@ function Dashboard() {
             eventSourceRef.current.close();
             eventSourceRef.current = null;
         }
-        const runId = (data.data as any).run_id;
+        const runId = (data.data as { run_id: string }).run_id;
         if (runId) {
             fetchExecutionReport(runId);
             setIsExplorerOpen(true);
@@ -429,18 +427,32 @@ function Dashboard() {
     };
   }, [isResizing]);
 
-  const handleElementPicked = (element: any) => {
+  const [pickingOptions, setPickingOptions] = useState<{ autoClose?: boolean }>({});
+
+  const handleElementPicked = async (element: ElementRef) => {
     if (pickingCallback) {
       pickingCallback(element);
     }
+    
+    // Auto-close browser if requested (AI Flow)
+    if (pickingOptions.autoClose) {
+      try {
+        await fetch(API_ENDPOINTS.INSPECTOR_STOP, { method: 'POST' });
+      } catch (e) {
+        console.error('Failed to auto-stop inspector:', e);
+      }
+    }
+
     setPickingCallback(null);
     setActivePickingBlockType(null);
+    setPickingOptions({});
     setIsInspectorOpen(false);
   };
 
-  const handleStartPicking = (blockType: string, callback: (element: any) => void) => {
+  const handleStartPicking = (blockType: string, callback: (element: ElementRef) => void, options: { autoClose?: boolean } = {}) => {
     setActivePickingBlockType(blockType);
     setPickingCallback(() => callback);
+    setPickingOptions(options);
     setIsInspectorOpen(true);
   };
 
@@ -453,6 +465,8 @@ function Dashboard() {
       });
       if (resp.ok) {
         addToast('success', 'Browser launched automatically.');
+        // Ensure the modal opens so the user can see the live session
+        setIsInspectorOpen(true);
       } else {
         throw new Error('Launch failed');
       }
@@ -466,7 +480,7 @@ function Dashboard() {
   // Extract context URL from the first open_page block
   const getContextUrl = (): string | undefined => {
     if (!currentFlow) return undefined;
-    const openPageBlock = currentFlow.blocks.find((b: any) => b.type === 'open_page');
+    const openPageBlock = currentFlow.blocks.find((b: FlowBlock) => b.type === 'open_page');
     return openPageBlock?.url;
   };
 
@@ -547,6 +561,23 @@ function Dashboard() {
                       {isRunning ? 'Execution Active' : 'Ready'}
                     </span>
                   </div>
+
+                  {/* Save Status Indicator */}
+                  {currentFlow && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-800 bg-zinc-900 shadow-inner min-w-[100px] transition-all duration-300">
+                          <div className={clsx(
+                              "w-1.5 h-1.5 rounded-full",
+                              saveStatus === 'saved' ? "bg-emerald-500" : 
+                              saveStatus === 'saving' ? "bg-amber-500 animate-pulse" : 
+                              "bg-zinc-700"
+                          )} />
+                          <span className="text-[10px] font-black uppercase tracking-[0.1em] text-zinc-400 transition-colors">
+                              {saveStatus === 'saved' ? 'Synced' : 
+                               saveStatus === 'saving' ? 'Syncing...' : 
+                               'Unsaved'}
+                          </span>
+                      </div>
+                  )}
 
                   <button 
                     onClick={runTest}
@@ -631,6 +662,7 @@ function Dashboard() {
                 <FlowEditor 
                 ref={blockEditorRef}
                 onFlowChange={setCurrentFlow}
+                onSaveStatusChange={setSaveStatus}
                 onValidationError={(errors) => {
                     if (errors.length > 0) console.warn('Errors:', errors);
                 }}
@@ -791,7 +823,6 @@ function Dashboard() {
         onDelete={handleDeleteEnvironment}
       />
 
-      <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
   );
 }
@@ -835,9 +866,11 @@ export default function App() {
 
     return (
         <AuthProvider>
-            <AuthGuard>
-                <Dashboard />
-            </AuthGuard>
+            <ToastProvider>
+                <AuthGuard>
+                    <Dashboard />
+                </AuthGuard>
+            </ToastProvider>
         </AuthProvider>
     );
 }

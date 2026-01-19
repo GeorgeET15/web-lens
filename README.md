@@ -10,7 +10,7 @@ WebLens is a professional-grade visual web testing application designed to run o
 ## SECTION 1 — PRODUCT POSTURE
 
 - **Local-First Architecture**: Your primary data remains local. Optional **Cloud-Sync (Supabase)** allows persisting flows and executions across devices.
-- **AI-Powered (Genie)**: Natural language "Intent to Flow" generation ensures you can build complex test cases by simply describing your goals.
+- **AI-Powered (WebLens AI)**: Natural language "Intent to Flow" generation ensures you can build complex test cases by simply describing your goals.
 - **Privacy & Ownership**: Your interaction signatures and visual evidence stay in your controlled environment.
 - **Proprietary & Free**: WebLens is free for personal, educational, and commercial use. Refer to [LICENSE.txt](LICENSE.txt).
 
@@ -28,10 +28,10 @@ WebLens is a professional-grade visual web testing application designed to run o
 
 ## SECTION 3 — FEATURE HIGHLIGHTS
 
-### 🧞 Genie AI (Intent-to-Flow)
-Build tests using natural language. Genie understands your intent, suggests block sequences, and handles variable injection (`{{variable_name}}`) automatically. Features include:
+### 🧞 WebLens AI (Intent-to-Flow)
+Build tests using natural language. WebLens AI understands your intent, suggests block sequences, and handles variable injection (`{{variable_name}}`) automatically. Features include:
 - **Multi-Turn Chat**: Refine your flow through conversation.
-- **Context Awareness**: Genie knows your global and environment variables.
+- **Context Awareness**: WebLens AI knows your global and environment variables.
 - **Manual Approval**: Review and "Add to Flow" ensures total developer control.
 
 ### 🔄 Smart Flow Management

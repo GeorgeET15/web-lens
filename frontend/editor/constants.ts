@@ -191,5 +191,10 @@ export const DEFAULT_BLOCKS: Record<BlockType, Omit<EditorBlock, 'id'>> = {
     type: 'switch_tab',
     label: 'Switch Tab',
     params: { to_newest: true, tab_index: 0 }
+  },
+  visual_verify: {
+    type: 'visual_verify',
+    label: 'Visual Verify',
+    params: { baseline_id: '', threshold: 0.1 }
   }
 };

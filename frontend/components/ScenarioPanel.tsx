@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { FileDown, Upload, Play, AlertCircle, Save, Layers, Trash2 } from 'lucide-react';
 import { API_ENDPOINTS } from '../config/api';
-import { Scenario, ScenarioSet, ScenarioSuiteReport } from '../editor/entities';
+import { Scenario, ScenarioSuiteReport } from '../editor/entities';
 import { ExecutionStatusModal } from './execution/ExecutionStatusModal';
 import { useAuth } from '../contexts/AuthContext';
 
+import { FlowGraph, ScenarioSet as CanonicalScenarioSet } from '../types/flow';
+
 interface ScenarioPanelProps {
-    flowJson: any;
+    flowJson: FlowGraph;
     onExecutionComplete?: (report: ScenarioSuiteReport) => void;
-    onUpdateFlow?: (updatedFlow: any) => void;
+    onUpdateFlow?: (updatedFlow: FlowGraph) => void;
 }
 
 export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({ 
@@ -57,8 +59,8 @@ export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
 
-        } catch (error: any) {
-            setErrors([error.message]);
+        } catch (error) {
+            setErrors([error instanceof Error ? error.message : 'Generation failed']);
         } finally {
             setIsGenerating(false);
         }
@@ -92,8 +94,8 @@ export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({
             const data = await response.json();
             setScenarios(data.scenarios);
 
-        } catch (error: any) {
-            setErrors([error.message]);
+        } catch (error) {
+            setErrors([error instanceof Error ? error.message : 'Upload failed']);
         } finally {
             setIsValidating(false);
         }
@@ -127,8 +129,8 @@ export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({
             const data = await response.json();
             setExecutingSuiteId(data.suite_id);
 
-        } catch (error: any) {
-            setErrors([error.message]);
+        } catch (error) {
+            setErrors([error instanceof Error ? error.message : 'Execution failed']);
             setIsExecuting(false);
             setExecutingSuiteId(null);
         }
@@ -164,17 +166,17 @@ export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({
             onUpdateFlow?.(updatedFlow);
             setSetName('');
             
-        } catch (error: any) {
-            setErrors([error.message]);
+        } catch (error) {
+            setErrors([error instanceof Error ? error.message : 'Saving failed']);
         } finally {
             setIsSavingSet(false);
         }
     };
 
-    const handleLoadSet = (set: ScenarioSet) => {
+    const handleLoadSet = (set: CanonicalScenarioSet) => {
         setScenarios(set.scenarios.map(s => ({
-            scenarioId: s.scenarioId,
-            scenarioName: s.scenarioName,
+            scenarioId: s.scenario_id,
+            scenarioName: s.scenario_name,
             values: s.values
         })));
     };
@@ -202,7 +204,7 @@ export const ScenarioPanel: React.FC<ScenarioPanelProps> = ({
                                 Saved Sets
                             </p>
                             <div className="grid grid-cols-1 gap-1">
-                                {flowJson.scenario_sets.map((set: ScenarioSet) => (
+                                {flowJson.scenario_sets.map((set: CanonicalScenarioSet) => (
                                     <button
                                         key={set.id}
                                         onClick={() => handleLoadSet(set)}

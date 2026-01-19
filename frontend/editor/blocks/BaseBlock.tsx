@@ -10,6 +10,7 @@ import {
   MousePointer2, 
   Type, 
   Eye, 
+  Camera,
   AlertCircle, 
   ArrowRight, 
   Clock, 
@@ -40,6 +41,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { EditorBlock, SavedValue, BlockType } from '../entities';
+import { ElementRef } from '../../types/element';
 import { ElementPicker } from '../../components/ElementPicker';
 import { ConditionSelector } from './ConditionSelector';
 import { VariableInput } from '../../components/VariableInput';
@@ -54,8 +56,8 @@ export interface BaseBlockProps {
   onDelete?: (id: string) => void;
   onDuplicate?: (id: string) => void;
   onUpdate?: (id: string, updates: Partial<EditorBlock>) => void;
-  onRequestPick?: (blockType: string, callback: (element: any) => void) => void;
-  onAddBlock?: (type: any, parentId?: string, branchKey?: 'then' | 'else' | 'body') => void;
+  onRequestPick?: (blockType: string, callback: (element: ElementRef) => void) => void;
+  onAddBlock?: (type: BlockType, parentId?: string, branchKey?: 'then' | 'else' | 'body') => void;
   savedValues?: SavedValue[];
   // Data-Driven rendering props
   blocks?: EditorBlock[];
@@ -108,8 +110,11 @@ const BLOCK_ICONS: Record<string, React.ReactNode> = {
   get_session_storage: <Cpu className="w-4 h-4 text-white" />,
   observe_network: <Activity className="w-4 h-4 text-white" />,
   switch_tab: <ExternalLink className="w-4 h-4 text-white" />,
+  visual_verify: <Camera className="w-4 h-4 text-white" />,
   ai_prompt: <Sparkles className="w-4 h-4 text-indigo-400" />
 };
+
+export { BLOCK_ICONS };
 
 // Helper component to render children blocks for a specific branch
 // Helper component to render children blocks for a specific branch
@@ -333,6 +338,12 @@ const IntentSentence = memo(({ block }: { block: EditorBlock }) => {
                 Switch to {block.params.to_newest ? 'Newest Tab' : `Tab #${block.params.tab_index}`}
             </div>
         );
+        case 'visual_verify': return (
+            <div className="flex items-center flex-wrap gap-y-1">
+                Visual check against <ValueText value={block.params.baseline_id} placeholder="baseline..." /> 
+                <span className="text-zinc-600 mx-1">(threshold: {(block.params.threshold * 100).toFixed(0)}%)</span>
+            </div>
+        );
         case 'ai_prompt': return (
             <div className="flex items-center flex-wrap gap-y-1">
                 <span className="text-indigo-400 font-bold mr-2">AI:</span>
@@ -369,7 +380,7 @@ const BaseBlockContent = memo(function BaseBlockContent({
     isHighlighted,
     isDragging
 }: BaseBlockProps & {
-    dragListeners?: any;
+    dragListeners?: Record<string, any>;
     isOverlay?: boolean;
     isDragging?: boolean;
 }) {
@@ -387,7 +398,7 @@ const BaseBlockContent = memo(function BaseBlockContent({
 
     const handlePick = () => {
         if (onRequestPick) {
-            onRequestPick(block.type, (element: any) => {
+            onRequestPick(block.type, (element: ElementRef) => {
                 onUpdate?.(id, { params: { ...block.params, element } });
                 setIsPicking(false);
             });
@@ -581,6 +592,40 @@ const BaseBlockContent = memo(function BaseBlockContent({
                 </>
             )}
             
+            {block.type === 'visual_verify' && (
+                <div className="space-y-4 pt-2">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 font-mono w-16">Baseline</span>
+                        <VariableInput 
+                            value={block.params.baseline_id || ''}
+                            onChange={(val: string) => onUpdate?.(id, { params: { ...block.params, baseline_id: val } })}
+                            savedValues={savedValues}
+                            className="flex-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-indigo-300 focus:border-indigo-500/50 transition-all"
+                            placeholder="Snapshot ID (e.g. login_page)"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <div className="flex items-center justify-between px-1">
+                            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Tolerance Threshold</span>
+                            <span className="text-[10px] text-indigo-400 font-mono">{(block.params.threshold * 100).toFixed(0)}% Diff</span>
+                        </div>
+                        <input 
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value={block.params.threshold || 0.1}
+                            onChange={(e) => onUpdate?.(id, { params: { ...block.params, threshold: parseFloat(e.target.value) } })}
+                            className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                        />
+                         <div className="flex justify-between px-1 text-[8px] text-zinc-600 font-bold">
+                            <span>STRICT</span>
+                            <span>LOOSE</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {block.type === 'ai_prompt' && (
                 <div className="flex flex-col gap-2">
                     <span className="text-xs text-indigo-400 font-mono font-bold tracking-widest uppercase">Instruction</span>
@@ -626,7 +671,7 @@ const BaseBlockContent = memo(function BaseBlockContent({
                          <div className="text-[9px] text-zinc-600 px-1 flex items-center justify-between">
                              <div className="flex items-center gap-1">
                                  <Database className="w-2.5 h-2.5" />
-                                 <span>Type <code className="text-white">{"{{ "}</code> for suggestions</span>
+                                 <span>Type <code className="text-white">{"{{"}</code> for suggestions</span>
                              </div>
                              <button
                                  onClick={() => onUpdate?.(id, { params: { ...block.params, clear_first: !block.params.clear_first } })}
@@ -1436,11 +1481,27 @@ const BaseBlockContent = memo(function BaseBlockContent({
                     )}
                 </div>
             )}
+
+            {(block.type === 'get_cookies' || block.type === 'get_local_storage' || block.type === 'get_session_storage') && (
+                <div className="py-1">
+                    <p className="text-[10px] text-zinc-400 font-black uppercase tracking-widest leading-relaxed">
+                        Captures {block.type.replace(/_/g, ' ')} for diagnostic evidence.
+                    </p>
+                </div>
+            )}
+
+            {block.type === 'observe_network' && (
+                <div className="py-1">
+                    <p className="text-[10px] text-zinc-400 font-black uppercase tracking-widest leading-relaxed">
+                        Starts background network traffic monitoring.
+                    </p>
+                </div>
+            )}
         </div> {/* Close Content UI (original 355) */}
       </div> {/* Close Main Block Container (added 234) */}
 
       {/* Sequential Children (Snapped Blocks) - Data Driven */}
-      {renderBlockList?.({ parentId: id, branchKey: undefined as any })}
+      {renderBlockList?.({ parentId: id, branchKey: undefined as 'then' | 'else' | 'body' | undefined })}
     </div>
   );
 });

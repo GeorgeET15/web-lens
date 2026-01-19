@@ -43,6 +43,9 @@ export const API_ENDPOINTS = {
   
   // Flows
   FLOWS: `${BASE}/api/flows`,
+  
+  // User Stats
+  USER_STATS: `${BASE}/api/user/stats`,
 };
 
 export const SAMPLE_FLOW = {

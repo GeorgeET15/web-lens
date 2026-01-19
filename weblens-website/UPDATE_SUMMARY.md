@@ -24,7 +24,7 @@
 4. **Roadmap Updates** ✅
    - Updated `src/pages/Roadmap.tsx` (Lines 19-45)
    - **v1.0.0 (STABLE)** now includes:
-     - Genie AI Flow Generator
+     - WebLens AI Flow Generator
      - AI-Powered Failure Analysis
      - Supabase Cloud Sync
      - Debian Package Distribution

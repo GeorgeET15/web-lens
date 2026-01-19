@@ -382,7 +382,7 @@ class SeleniumEngine(BrowserEngine):
             alert = self.driver.switch_to.alert
             logger.info(f"Silent Guard: Auto-dismissing unexpected native alert: {alert.text}")
             alert.dismiss()
-        except:
+        except Exception as e:
             # No alert present, which is the normal case
             pass
 
@@ -494,8 +494,8 @@ class SeleniumEngine(BrowserEngine):
                 try:
                     self.driver.execute_script("arguments[0].focus();", handle)
                     time.sleep(0.1)
-                except:
-                    pass  # Non-critical failure
+                except Exception as focus_err:
+                    logger.debug(f"Non-critical: Failed to focus element for input: {focus_err}")
                 
                 if clear_first:
                     handle.clear()
@@ -600,7 +600,8 @@ class SeleniumEngine(BrowserEngine):
                         logger.info(f"Activated primary action via selector: {selector}")
                         btn.click()
                         return
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Primary action selector '{selector}' failed or not found: {e}")
                 continue
 
         # 2. Text Content Heuristic (Medium Confidence)
@@ -657,15 +658,15 @@ class SeleniumEngine(BrowserEngine):
             WebDriverWait(self.driver, timeout_seconds).until(
                 lambda d: d.execute_script("return document.readyState") == "complete"
             )
-        except Exception:
-            logger.warning("SmartWait: ReadyState timed out or failed, proceeding anyway.")
+        except Exception as e:
+            logger.warning(f"SmartWait: ReadyState timed out or failed: {e}")
 
         # 2. Font Guard
         try:
             # Short timeout for fonts as they might take forever on slow connections
             self.driver.execute_script("return document.fonts.ready", timeout=0.5)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"SmartWait: Font guard failed: {e}")
 
         # 3. Visual Stability Guard (Animation Guard)
         # We track positions of a few sample interactive elements to see if the page is moving
@@ -905,7 +906,8 @@ class SeleniumEngine(BrowserEngine):
                 return False
                 
             return True
-        except:
+        except Exception as e:
+            logger.debug(f"Guard Check Failed for element: {e}")
             return False
 
     def get_snapshot(self) -> dict:
@@ -1051,8 +1053,8 @@ class SeleniumEngine(BrowserEngine):
         if self.driver:
             try:
                 self.driver.quit()
-            except Exception:
-                pass  # Ignore errors during cleanup
+            except Exception as e:
+                logger.debug(f"Error during driver quit: {e}")
             finally:
                 self.driver = None
         
@@ -1123,7 +1125,8 @@ class SeleniumEngine(BrowserEngine):
                             if request_url:
                                 self._network_id_map[request_id]['url'] = request_url
 
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"Failed to parse network log entry: {e}")
                     continue
             
             # Memory Cleanup: Keep latest 1000 requests to prevent leaks
@@ -1320,21 +1323,21 @@ class SeleniumEngine(BrowserEngine):
         self._ensure_hud_injected()
         try:
             self.driver.execute_script("if (window.__WEBLENS_HUD__) window.__WEBLENS_HUD__.hideIntent();")
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"HUD: Failed to hide intent: {e}")
 
     def log_hud(self, message: str) -> None:
         """Log a message to the HUD ticker tape."""
         self._ensure_hud_injected()
         try:
             self.driver.execute_script("if (window.__WEBLENS_HUD__) window.__WEBLENS_HUD__.log(arguments[0]);", message)
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"HUD: Failed to log message: {e}")
 
     def update_hud_inventory(self, data: Dict[str, Any]) -> None:
         """Update the HUD variable inspector."""
         self._ensure_hud_injected()
         try:
             self.driver.execute_script("if (window.__WEBLENS_HUD__) window.__WEBLENS_HUD__.updateInventory(arguments[0]);", data)
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"HUD: Failed to update inventory: {e}")

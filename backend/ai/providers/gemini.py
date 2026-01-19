@@ -1,24 +1,22 @@
 import os
 import asyncio
+import logging
 from typing import Optional, List
 from langchain_google_genai import ChatGoogleGenerativeAI
 from .interface import LLMProvider
 
+logger = logging.getLogger(__name__)
+
 class GeminiProvider(LLMProvider):
-    def __init__(self):
-        # Support both GOOGLE_API_KEY and GEMINI_API_KEY
-        self.api_key = os.getenv("GEMINI_API_KEY")
+    def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None):
+        # Prefer injected key, fallback to env vars
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        self.model_name = model_name or "gemini-2.5-flash"
         self._llm = None
+        
         if self.api_key:
-            model_name = "gemini-2.5-flash"
-            print(f"Initializing Gemini with model: {model_name}", flush=True)
-            self._llm = ChatGoogleGenerativeAI(
-                model=model_name,
-                google_api_key=self.api_key,
-                temperature=0.3, # Slightly more creative for detailed audits
-                max_output_tokens=4096,
-                top_p=0.95
-            )
+            logger.info(f"Initializing Gemini with model: {self.model_name}")
+            self._init_llm()
 
     async def generate_text(self, prompt: str) -> Optional[str]:
         return await self.generate_multimodal(prompt, [])
@@ -45,11 +43,11 @@ class GeminiProvider(LLMProvider):
                 })
             
             message = HumanMessage(content=content)
-            print(f"Gemini generating multimodal response (images={len(images_base64)})...", flush=True)
+            logger.info(f"Gemini generating multimodal response (images={len(images_base64)})...")
             response = await self._llm.ainvoke([message])
             return response.content
         except Exception as e:
-            print(f"Gemini multimodal generation error: {e}")
+            logger.error(f"Gemini multimodal generation error: {e}")
             raise e
 
     def _init_llm(self):
@@ -57,7 +55,7 @@ class GeminiProvider(LLMProvider):
         if not self.api_key:
             return
         model_name = "gemini-2.5-flash"
-        print(f"Initializing/Re-binding Gemini client for loop: {id(asyncio.get_event_loop())}", flush=True)
+        logger.info(f"Initializing/Re-binding Gemini client for loop: {id(asyncio.get_event_loop())}")
         self._llm = ChatGoogleGenerativeAI(
             model=model_name,
             google_api_key=self.api_key,

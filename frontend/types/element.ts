@@ -2,17 +2,15 @@ export interface ElementRef {
   /**
    * Unique identifier for the element within the scope of the capture session
    */
-  id: string;
+  id?: string;
 
   /**
    * Semantic role of the element (e.g., 'button', 'input', 'link', 'text')
-   * Used for visual icons and accessibility hints.
    */
-  role: 'button' | 'input' | 'link' | 'text' | 'image' | 'container' | 'unknown';
+  role: string;
 
   /**
    * The visible text content or label of the element.
-   * Primary human-readable identifier.
    */
   name: string;
 
@@ -29,10 +27,7 @@ export interface ElementRef {
   /**
    * Semantic context for user-declared elements (e.g., region)
    */
-  context?: {
-    region?: 'header' | 'navigation' | 'main' | 'footer' | 'toolbar';
-    [key: string]: any;
-  };
+  context?: Record<string, string>;
 
   /**
    * Intent type: semantic (preferred) or structural (void elements)

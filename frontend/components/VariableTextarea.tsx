@@ -151,7 +151,7 @@ export function VariableTextarea({
                     }}
                 >
                     <div className="p-1 px-2 text-[9px] text-zinc-500 uppercase font-black border-b border-white/5 bg-black/20">Suggestions</div>
-                    {savedValues?.filter((v: any) => v.key.toLowerCase().includes(filter.toLowerCase())).map((v: any) => (
+                    {savedValues?.filter(v => v.key.toLowerCase().includes(filter.toLowerCase())).map(v => (
                         <button
                             key={v.key}
                             type="button"
@@ -168,7 +168,7 @@ export function VariableTextarea({
                             </div>
                         </button>
                     ))}
-                    {savedValues?.filter((v: any) => v.key.toLowerCase().includes(filter.toLowerCase())).length === 0 && (
+                    {savedValues?.filter(v => v.key.toLowerCase().includes(filter.toLowerCase())).length === 0 && (
                         <div className="px-3 py-2 text-[10px] text-zinc-600 italic">No variables match "{filter}"</div>
                     )}
                 </div>,

@@ -209,7 +209,7 @@ class StructuralResolver:
                 # Normalize: threshold is 25, let's say 40+ is 1.0
                 norm_score = min(1.0, raw_score / 40.0) if raw_score > 0 else 0
                 candidate_count = result.get('candidateCount', 0)
-                print(f"[Structural Resolution] Resolved '{ref.system_role}' with score {norm_score} ({candidate_count} candidates)")
+                logger.info(f"[Structural Resolution] Resolved '{ref.system_role}' with score {norm_score} ({candidate_count} candidates)")
                 return result['element'], norm_score, None
             
         except BrowserEngineError:

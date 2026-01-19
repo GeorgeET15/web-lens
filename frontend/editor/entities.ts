@@ -1,6 +1,8 @@
+import { ExecutionReport } from '../types/execution';
 
 
-export type BlockType = 'open_page' | 'click_element' | 'enter_text' | 'wait_until_visible' | 'assert_visible' | 'if_condition' | 'repeat_until' | 'delay' | 'refresh_page' | 'wait_for_page_load' | 'select_option' | 'upload_file' | 'verify_text' | 'verify_page_content' | 'scroll_to_element' | 'save_text' | 'save_page_content' | 'verify_page_title' | 'verify_url' | 'verify_element_enabled' | 'use_saved_value' | 'verify_network_request' | 'verify_performance' | 'submit_form' | 'confirm_dialog' | 'dismiss_dialog' | 'activate_primary_action' | 'submit_current_input' | 'get_cookies' | 'get_local_storage' | 'get_session_storage' | 'observe_network' | 'switch_tab' | 'ai_prompt';
+export type BlockType = 'open_page' | 'click_element' | 'enter_text' | 'wait_until_visible' | 'assert_visible' | 'if_condition' | 'repeat_until' | 'delay' | 'refresh_page' | 'wait_for_page_load' | 'select_option' | 'upload_file' | 'verify_text' | 'verify_page_content' | 'scroll_to_element' | 'save_text' | 'save_page_content' | 'verify_page_title' | 'verify_url' | 'verify_element_enabled' | 'use_saved_value' | 'verify_network_request' | 'verify_performance' | 'submit_form' | 'confirm_dialog' | 'dismiss_dialog' | 'activate_primary_action' | 'submit_current_input' | 'get_cookies' | 'get_local_storage' | 'get_session_storage' | 'observe_network' | 'switch_tab' | 'visual_verify' | 'ai_prompt';
+
 
 
 export interface EditorBlock {
@@ -46,7 +48,7 @@ export interface ScenarioExecutionResult {
     scenarioName: string;
     runId: string;
     success: boolean;
-    report: any; // ExecutionReport type
+    report: ExecutionReport;
 }
 
 export interface ScenarioSuiteReport {

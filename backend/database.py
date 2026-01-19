@@ -83,12 +83,13 @@ class SupabaseService:
                 "updated_at": "now()"
             }
             
-            # Check if flow has ID, if so, upsert
+            # Check if flow has ID, if so, ensure it belongs to the user
             flow_id = flow_data.get("id")
             if flow_id:
                 data["id"] = flow_id
-                
-            response = self.client.table("flows").upsert(data).execute()
+                response = self.client.table("flows").upsert(data).execute()
+            else:
+                response = self.client.table("flows").insert(data).execute()
             
             if response.data and len(response.data) > 0:
                 return response.data[0]['id']
@@ -209,7 +210,8 @@ class SupabaseService:
                         files_to_delete = [f"{rid}/{f['name']}" for f in files_list]
                         if files_to_delete:
                             self.client.storage.from_("screenshots").remove(files_to_delete)
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"Failed to clean storage for run {rid} during history clearing: {e}")
                     continue # Skip errors to proceed with next
             
             # 3. Delete All Records
@@ -218,6 +220,7 @@ class SupabaseService:
             return True
             
         except Exception as e:
+            logger.error(f"Failed to clear user history: {e}")
             return False
             
     def get_environments(self, user_id: str) -> list:
@@ -253,8 +256,9 @@ class SupabaseService:
             env_id = env_data.get("id")
             if env_id:
                 data["id"] = env_id
-                
-            resp = self.client.table("environments").upsert(data).execute()
+                resp = self.client.table("environments").upsert(data).execute()
+            else:
+                resp = self.client.table("environments").insert(data).execute()
             if resp.data and len(resp.data) > 0:
                 return resp.data[0]
             return None

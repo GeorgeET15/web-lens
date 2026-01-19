@@ -71,7 +71,7 @@ export function EmbeddedBrowser({ url, isOpen, onClose, onPick }: EmbeddedBrowse
     }
   };
 
-  const handleInteract = async (action: string, params: any) => {
+  const handleInteract = async (action: string, params: Record<string, string | number | boolean>) => {
       if (mode !== 'browse' && action === 'click') return;
       
       setLoading(true);

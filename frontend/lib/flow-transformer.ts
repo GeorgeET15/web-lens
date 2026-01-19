@@ -1,6 +1,7 @@
-import { FlowGraph, FlowBlock } from '../types/flow';
+import { FlowGraph, FlowBlock, ScenarioSet } from '../types/flow';
 import { DEFAULT_BLOCKS } from '../editor/constants';
 import { EditorBlock, BlockType } from '../editor/entities';
+import { ChatHistory } from '../types/chat';
 
 /**
  * Handles conversion between Canonical Flow JSON (Backend) and Editor State (Frontend).
@@ -15,11 +16,11 @@ export const FlowTransformer = {
     flowName: string, 
     blocks: EditorBlock[], 
     globalVariables: { key: string, value: string }[],
-    scenarioSets: any[] = [],
+    scenarioSets: ScenarioSet[] = [],
     schema_version: number = 1,
     id?: string,
     description?: string,
-    chat_history?: any
+    chat_history?: ChatHistory
   ): FlowGraph => {
     
     // 1. Convert Variables
@@ -104,14 +105,14 @@ export const FlowTransformer = {
       scenario_sets: scenarioSets.map(set => ({
         id: set.id,
         name: set.name,
-        created_at: set.createdAt || set.created_at,
-        scenarios: set.scenarios.map((s: any) => ({
-          scenario_id: s.scenarioId || s.scenario_id,
-          scenario_name: s.scenarioName || s.scenario_name,
+        created_at: set.created_at,
+        scenarios: set.scenarios.map(s => ({
+          scenario_id: s.scenario_id,
+          scenario_name: s.scenario_name,
           values: s.values
         }))
       })),
-      chat_history: chat_history || {}
+      chat_history: chat_history
     };
   },
 
@@ -123,9 +124,10 @@ export const FlowTransformer = {
     blocks: EditorBlock[], 
     name: string, 
     variables: { id: string, key: string, value: string }[],
-    scenarioSets: any[],
+    scenarioSets: ScenarioSet[],
     schemaVersion: number,
-    description?: string
+    description?: string,
+    chat_history?: ChatHistory
   } => {
     
     // 1. Index blocks for O(1) lookup
@@ -173,8 +175,8 @@ export const FlowTransformer = {
 
         if (type === 'if_condition') {
           const thenIds = (rawBlock['then_blocks'] as string[]) || [];
-          const elseIds = (rawBlock['else_blocks'] as string[]) || [];
           if (thenIds[0]) processChain(thenIds[0], id, 'then');
+          const elseIds = (rawBlock['else_blocks'] as string[]) || [];
           if (elseIds[0]) processChain(elseIds[0], id, 'else');
         }
         if (type === 'repeat_until') {
@@ -231,15 +233,16 @@ export const FlowTransformer = {
       scenarioSets: (flow.scenario_sets || []).map(set => ({
         id: set.id,
         name: set.name,
-        createdAt: set.created_at || (set as any).createdAt,
-        scenarios: set.scenarios.map((s: any) => ({
-          scenarioId: s.scenario_id || s.scenarioId,
-          scenarioName: s.scenario_name || s.scenarioName,
+        created_at: set.created_at,
+        scenarios: set.scenarios.map(s => ({
+          scenario_id: s.scenario_id,
+          scenario_name: s.scenario_name,
           values: s.values
         }))
       })),
       schemaVersion: flow.schema_version || 1,
-      description: flow.description
+      description: flow.description,
+      chat_history: flow.chat_history || {}
     };
   }
 };

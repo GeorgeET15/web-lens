@@ -1,6 +1,11 @@
-/**
- * Execution Insight types matching backend schema.
- */
+export interface AIInsightData {
+  summary?: string;
+  intent?: string;
+  reason?: string;
+  suggestion?: string;
+  guidance?: string[];
+  reliability?: number;
+}
 
 export interface BlockExecution {
   run_id: string;
@@ -19,7 +24,13 @@ export interface BlockExecution {
   expected_attributes?: Record<string, any>;
   actual_attributes?: Record<string, any>;
   semantic_candidates?: any[];
-  tier_2_evidence?: any;
+  tier_2_evidence?: {
+    baseline?: string;
+    current?: string;
+    diff_score?: number;
+    dom_snapshot?: string;
+    network_logs?: any[];
+  };
 }
 
 export interface ExecutionSummary {
@@ -41,5 +52,5 @@ export interface ExecutionReport {
     type: string;
     message: string;
     related_block_id?: string;
-  };
+  } & AIInsightData;
 }

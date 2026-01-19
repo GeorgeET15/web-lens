@@ -3,7 +3,7 @@
 ## v1.0.0 (January 2026)
 The official launch of **WebLens** — the deterministic, zero-code web testing engine with AI collaboration.
 
-### 🧞 Genie AI (Intent-to-Flow)
+### 🧞 WebLens AI (Intent-to-Flow)
 - **Conversational Design**: Build and refine flows using multi-turn natural language dialogue.
 - **Variable Intelligence**: Automatic detection and injection of `{{variables}}` during generation.
 - **Blueprint Preview**: Review AI-generated sequences before committing them to your flow.

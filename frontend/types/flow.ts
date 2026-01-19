@@ -24,6 +24,8 @@ export interface ScenarioSet {
   created_at: number;
 }
 
+import { ChatHistory } from './chat';
+
 export interface FlowGraph {
   id?: string;
   name: string;
@@ -33,5 +35,5 @@ export interface FlowGraph {
   blocks: FlowBlock[];
   variables?: Record<string, string>;
   scenario_sets?: ScenarioSet[];
-  chat_history?: Record<string, any>;
+  chat_history?: ChatHistory;
 }

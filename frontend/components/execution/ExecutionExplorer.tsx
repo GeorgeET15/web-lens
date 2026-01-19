@@ -8,6 +8,7 @@ import ExecutionList from './ExecutionList';
 import { API_ENDPOINTS } from '../../config/api';
 import { Terminal, History, ChevronLeft, Share2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useToast } from '../ToastContext';
 
 interface Props {
   report: ExecutionReport | null; // Report can now be null
@@ -23,6 +24,7 @@ export const ExecutionExplorer: React.FC<Props> = ({
   selectedBlockId: externalSelectedId,
   className,
 }) => {
+  const { addToast } = useToast();
   const [activeReport, setActiveReport] = useState<ExecutionReport | null>(initialReport);
   const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -158,9 +160,7 @@ export const ExecutionExplorer: React.FC<Props> = ({
                                 onClick={() => {
                                     const finalUrl = `${window.location.origin}${window.location.pathname}?report=${activeReport.run_id}`;
                                     navigator.clipboard.writeText(finalUrl);
-                                    if ((window as any).addToast) {
-                                        (window as any).addToast('success', 'Live share link copied!');
-                                    }
+                                    addToast('success', 'Live share link copied!');
                                 }}
                                 className="px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-md text-[10px] font-black uppercase tracking-widest text-indigo-400 hover:bg-indigo-500/20 transition-all active:scale-95 flex items-center gap-2"
                             >

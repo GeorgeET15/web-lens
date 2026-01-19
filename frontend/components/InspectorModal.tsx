@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import { X, ExternalLink, Target, Loader2, AlertCircle } from 'lucide-react';
 import { API_ENDPOINTS } from '../config/api';
 
+import { ElementRef } from '../types/element';
+
 interface InspectorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onElementPicked: (element: any) => void;
+  onElementPicked: (element: ElementRef) => void;
   contextUrl?: string;
   blockType?: string | null;
 }
@@ -40,7 +42,7 @@ export const InspectorModal: React.FC<InspectorModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [currentUrl, setCurrentUrl] = useState<string>('');
   const [showResyncNotice, setShowResyncNotice] = useState(false);
-  const [lastPickedElement, setLastPickedElement] = useState<any | null>(null);
+  const [lastPickedElement, setLastPickedElement] = useState<ElementRef | null>(null);
   const [mismatchWarning, setMismatchWarning] = useState<string | null>(null);
 
   // Auto-connect to WebSocket when modal opens
@@ -247,7 +249,9 @@ export const InspectorModal: React.FC<InspectorModalProps> = ({
                     <div className="pt-2 flex items-center gap-3">
                         <button 
                             onClick={() => {
-                                onElementPicked(lastPickedElement);
+                                if (lastPickedElement) {
+                                    onElementPicked(lastPickedElement);
+                                }
                                 if (wsRef.current) wsRef.current.close();
                                 onClose();
                             }}
@@ -292,10 +296,10 @@ export const InspectorModal: React.FC<InspectorModalProps> = ({
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="text-[10px] font-bold text-zinc-300 truncate">
-                                {lastPickedElement.name || lastPickedElement.tagName || 'Selected Element'}
+                                {lastPickedElement.name || lastPickedElement.metadata?.tagName || 'Selected Element'}
                             </p>
                             <p className="text-[9px] text-zinc-600 font-mono truncate">
-                                {lastPickedElement.selector?.slice(0, 50)}...
+                                {lastPickedElement.metadata?.selector?.slice(0, 50)}...
                             </p>
                         </div>
                     </div>

@@ -1,34 +1,33 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Sparkles, Send, X, ChevronDown, ChevronUp, Check, Plus, Trash2, Loader2 } from 'lucide-react';
 import { API_ENDPOINTS } from '../../config/api';
-import { useAuth } from '../../contexts/AuthContext';
+import { api } from '../../lib/api';
 import { VariableTextarea } from '../VariableTextarea';
 import { ClearChatDialog } from '../dialogs/ClearChatDialog';
+import { FlowGraph, FlowBlock } from '../../types/flow';
+import { ChatHistory, ChatMessage } from '../../types/chat';
 
-interface GeniePromptProps {
-    onFlowGenerated: (flow: any) => void;
+interface AIPromptProps {
+    onFlowGenerated: (flow: FlowGraph) => void;
     addToast: (type: 'success' | 'error' | 'info', message: string) => void;
     isSidePanel?: boolean;
     variables?: Record<string, string>;
     onClose?: () => void;
-    chatHistory?: any;
-    onChatUpdate?: (chatHistory: any) => void;
-    currentFlow?: any;
-    onRequestPick?: (blockType: string, callback: (element: any) => void) => void;
+    chatHistory?: ChatHistory;
+    onChatUpdate?: (chatHistory: ChatHistory) => void;
+    currentFlow?: FlowGraph;
+    onRequestPick?: (blockType: string, callback: (element: any) => void, options?: { autoClose?: boolean }) => void;
     onAutoLaunch?: (url: string) => Promise<void>;
 }
 
-interface GenieMessage {
-    role: 'user' | 'assistant';
-    content: string;
-    flow?: any;
+interface AIMessage extends ChatMessage {
     mode?: 'ask' | 'build';
 }
 
 const FlowPreviewCard: React.FC<{
-    flow: any;
+    flow: FlowGraph;
     onAdd: () => void;
     onDiscard?: () => void;
 }> = ({ flow, onAdd, onDiscard }) => {
@@ -67,16 +66,16 @@ const FlowPreviewCard: React.FC<{
             {/* Expanded Content */}
             {isExpanded && (
                 <div className="p-2 space-y-1 bg-black/20 border-t border-white/5 max-h-[200px] overflow-y-auto custom-scrollbar">
-                    {flow.blocks?.map((block: any, idx: number) => (
+                    {flow.blocks?.map((block: FlowBlock, idx: number) => (
                         <div key={idx} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/[0.02] border border-white/5">
                             <span className="text-[10px] font-mono text-zinc-600 w-4">#{idx + 1}</span>
                             <div className="flex-1 min-w-0">
                                 <div className="text-[11px] font-medium text-zinc-300 truncate">
                                     {block.label || block.type.replace('_', ' ')}
                                 </div>
-                                {block.params && Object.keys(block.params).length > 0 && (
+                                {block.params && typeof block.params === 'object' && Object.keys(block.params).length > 0 && (
                                     <div className="text-[9px] text-zinc-600 truncate">
-                                        {Object.values(block.params).join(', ')}
+                                        {Object.values(block.params as Record<string, any>).join(', ')}
                                     </div>
                                 )}
                             </div>
@@ -109,7 +108,7 @@ const FlowPreviewCard: React.FC<{
     );
 };
 
-export const GeniePrompt: React.FC<GeniePromptProps> = ({ 
+export const AIPrompt: React.FC<AIPromptProps> = ({ 
     onFlowGenerated, 
     addToast, 
     isSidePanel, 
@@ -124,23 +123,15 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
     const [intent, setIntent] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     const [mode, setMode] = useState<'ask' | 'build'>('build');
-    const [messages, setMessages] = useState<GenieMessage[]>([]);
+    const [messages, setMessages] = useState<AIMessage[]>(chatHistory?.messages || []);
     const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-    const { session } = useAuth();
     const messagesContainerRef = useRef<HTMLDivElement>(null);
-
-    // Load chat history from database on mount
-    useEffect(() => {
-        if (chatHistory && chatHistory.messages) {
-            setMessages(chatHistory.messages);
-        }
-    }, [chatHistory]);
 
     // Save messages to database when they change
     useEffect(() => {
-        if (messages.length > 0 && onChatUpdate) {
-            onChatUpdate({ messages, mode });
+        if (onChatUpdate) {
+            onChatUpdate({ messages, last_updated: Date.now() });
         }
     }, [messages, mode, onChatUpdate]);
 
@@ -159,81 +150,77 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
         }
     }, [messages, isGenerating]);
 
-    const handleGenerate = async (overrideElement?: any) => {
-        const currentIntent = intent.trim();
+    const handleGenerate = useCallback(async (overrideElement?: any, retryIntent?: string, retryHistory?: AIMessage[]) => {
+        const currentIntent = retryIntent || intent.trim();
         if (!currentIntent && !overrideElement) return;
 
+        console.log('[AI] Generating flow...', { hasElement: !!overrideElement, intent: currentIntent });
         setIsGenerating(true);
+        const pickedElement = (overrideElement && !(overrideElement instanceof Event) && !overrideElement.nativeEvent) ? overrideElement : null;
         
-        // Add user message to history only if it's the first attempt (not a re-submit with element)
-        if (!overrideElement) {
-            const newUserMessage: GenieMessage = { role: 'user', content: currentIntent, mode };
-            setMessages(prev => [...prev, newUserMessage]);
-        } else {
+        // Add user message to history only if it's the first attempt (not a re-submit)
+        if (!overrideElement && !retryHistory) {
+            const newUserMessage: AIMessage = { role: 'user', content: currentIntent, mode };
+            setMessages((prev: AIMessage[]) => [...prev, newUserMessage]);
+            setIntent('');
+        } else if (overrideElement && !(overrideElement instanceof Event)) {
             // Show that an element was picked to avoid "uncertainty gap"
             const pickLabel = overrideElement.name || overrideElement.role || 'element';
-            const feedbackMessage: GenieMessage = { 
+            setMessages((prev: AIMessage[]) => [...prev, { 
                 role: 'user', 
                 content: `[Selected ${pickLabel}]`, 
                 mode 
-            };
-            setMessages(prev => [...prev, feedbackMessage]);
-        }
-        
-        // CHECK FOR @verify COMMAND: REMOVED (Now handled intelligently by AI)
-        let augmentedIntent = currentIntent;
-        let pickedElement = overrideElement || null;
-
-        // Clear intent if we are starting a fresh request
-        if (!overrideElement) {
-            setIntent('');
+            }]);
         }
 
         // --- AI Autonomous Context Scraping ---
         let interactionMap = null;
         try {
-            const mapResp = await fetch(`${API_ENDPOINTS.BASE_URL}/api/ai/scrape-interactions`);
-            if (mapResp.ok) {
-                const mapData = await mapResp.json();
-                if (mapData.status === 'success') {
-                    interactionMap = mapData;
-                }
+            const mapData: any = await api.get(`${API_ENDPOINTS.BASE_URL}/api/ai/scrape-interactions`);
+            if (mapData.status === 'success') {
+                interactionMap = mapData;
             }
         } catch (e) {
             // Ignore, inspector likely not running
         }
 
+        // Calculate history for this specific request
+        // Use retryHistory if available (recursive call), otherwise use state + current intent
+        let currentMessages: AIMessage[] = [];
+        if (retryHistory) {
+            currentMessages = [...retryHistory];
+            if (overrideElement && !(overrideElement instanceof Event)) {
+                const pickLabel = overrideElement.name || overrideElement.role || 'element';
+                currentMessages.push({ role: 'user', content: `[Selected ${pickLabel}]`, mode });
+            }
+        } else {
+            currentMessages = [...messages];
+            if (!overrideElement) {
+                currentMessages.push({ role: 'user', content: currentIntent, mode });
+            }
+        }
+
         try {
-            const token = session?.access_token;
-            const requestBody: any = { 
-                intent: augmentedIntent,
+            const requestBody: Record<string, any> = { 
+                intent: currentIntent,
                 mode: mode,
-                history: messages
+                history: currentMessages
                     .filter(m => (m.mode === mode) || (!m.mode && mode === 'build'))
                     .map(m => ({ role: m.role, content: m.content })),
                 variables,
                 currentFlow: currentFlow,
-                interactionMap: interactionMap // New Context
+                interactionMap: interactionMap,
+                pickedElement: pickedElement
             };
 
-            if (pickedElement) {
-                requestBody.pickedElement = pickedElement;
-            }
-
-            const resp = await fetch(`${API_ENDPOINTS.BASE_URL}/api/ai/generate-flow`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-                },
-                body: JSON.stringify(requestBody)
-            });
-            if (resp.ok) {
-                const result = await resp.json();
-                
+            console.log('[AI] Sending request to backend...', requestBody);
+            const result: any = await api.post(`${API_ENDPOINTS.BASE_URL}/api/ai/generate-flow`, requestBody);
+            console.log('[AI] Backend response received:', result);
+            
+            if (result) {
                 // IF AI NEEDS TO START BROWSER
                 if (result.action === 'start_inspector' && onAutoLaunch) {
-                    setMessages(prev => [...prev, { 
+                    setMessages((prev: AIMessage[]) => [...prev, { 
                         role: 'assistant', 
                         content: result.message || "I'm launching the browser to see the page...",
                         mode 
@@ -241,8 +228,9 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
                     
                     try {
                         await onAutoLaunch(result.url);
-                        setIsGenerating(false);
-                        return;
+                        // RE-TRIGGER GENERATE AUTO-TICALLY NOW THAT BROWSER IS OPEN
+                        console.log('[AI] Browser launched, re-triggering generation...');
+                        return handleGenerate(null, currentIntent, currentMessages);
                     } catch (err) {
                         addToast('error', 'Failed to auto-launch browser.');
                         setIsGenerating(false);
@@ -251,29 +239,27 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
                 }
 
                 if (result.action === 'pick_element' && onRequestPick) {
-                    // Show assistant's request
-                    setMessages(prev => [...prev, { 
+                    setMessages((prev: AIMessage[]) => [...prev, { 
                         role: 'assistant', 
                         content: result.message || "Please select the element you're referring to.",
                         mode 
                     }]);
 
-                    // Trigger Inspector
                     try {
                         const element = await new Promise<any>((resolve, reject) => {
                             onRequestPick('verify_text', (el) => {
                                 if (el) resolve(el);
                                 else reject("cancelled");
-                            });
+                            }, { autoClose: true });
                         });
 
                         if (element) {
-                            // Automatically re-submit with context
-                            // We don't clear isGenerating yet, we just chain the next call
-                            return handleGenerate(element);
+                            console.log('[AI] Element picked, triggering recursive generate...', { element });
+                            // Don't setIsGenerating(false) here, the recursive call will handle it
+                            return handleGenerate(element, currentIntent, currentMessages);
                         }
                     } catch (err) {
-                        console.error("Picking cancelled", err);
+                        console.log('[AI] Picking cancelled or failed');
                         setIsGenerating(false);
                         return;
                     }
@@ -281,17 +267,20 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
 
                 if (result.blocks && result.blocks.length > 0) {
                     // It's a flow
-                    const assistantMsg: GenieMessage = { 
+                    const assistantMsg: AIMessage = { 
                         role: 'assistant', 
                         content: result.name ? `I've created a flow: "${result.name}". Review the blocks below.` : "I've generated the automation blocks for you.",
-                        flow: result,
+                        metadata: { flow_generated: true },
                         mode
                     };
+                    // Keep the flow in metadata if needed or handle separately
+                    // Since AIMessage extends ChatMessage, we can use metadata
+                    assistantMsg.metadata = { ...assistantMsg.metadata, flow: result };
                     setMessages(prev => [...prev, assistantMsg]);
 
                 } else if (result.message) {
                     // Just text
-                    const assistantMsg: GenieMessage = { 
+                    const assistantMsg: AIMessage = { 
                         role: 'assistant', 
                         content: result.message,
                         mode 
@@ -300,16 +289,24 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
                 } else {
                     addToast('info', 'AI processed your request but didn\'t return a flow.');
                 }
-            } else {
-                const error = await resp.json();
-                addToast('error', error.detail || 'The AI is exhausted. Try again later.');
             }
-        } catch (err) {
-            addToast('error', 'Magic failed. Check your connection.');
+        } catch (err: any) {
+            console.error('[AI] Generation error:', err);
+            addToast('error', err.message || 'Magic failed. Check your connection.');
+            setIsGenerating(false);
         } finally {
+            // Only stop generating if we're not about to recurse or if we've successfully finished/errored
+            // The return statements in recursion paths prevent reaching here early.
+            // However, to be extra safe against race conditions during the modal transition:
+            if (!messages.some(m => m.role === 'assistant' && (m.content.includes("Launching") || m.content.includes("select")))) {
+                 // setIsGenerating(false); 
+            }
+            // Real fix: the recursive handleGenerate calls have 'return' so they never reach this finally block 
+            // of the parent call IF they are awaited. But they ARE awaited or returned.
+            // Let's just make sure the leaf node always sets it to false.
             setIsGenerating(false);
         }
-    };
+    }, [intent, mode, messages, variables, currentFlow, onAutoLaunch, onRequestPick, addToast]);
 
 
 
@@ -357,7 +354,7 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
                                         <Sparkles className="w-6 h-6 text-indigo-400" />
                                     </div>
                                     <h3 className="text-base font-bold text-white tracking-tight">
-                                        {mode === 'ask' ? 'Ask WebLens' : 'Build Flows'}
+                                        {mode === 'ask' ? 'Ask WebLens AI' : 'Build Flows'}
                                     </h3>
                                     <p className="text-xs text-zinc-400 max-w-[200px] mx-auto leading-relaxed">
                                         {mode === 'ask' 
@@ -456,12 +453,12 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
                                     </ReactMarkdown>
                                 </div>
                                 
-                                {msg.flow && (
+                                {msg.metadata?.flow && (
                                     <FlowPreviewCard 
-                                        flow={msg.flow} 
-                                        onAdd={() => onFlowGenerated(msg.flow)}
+                                        flow={msg.metadata.flow as FlowGraph} 
+                                        onAdd={() => onFlowGenerated(msg.metadata?.flow as FlowGraph)}
                                         onDiscard={() => {
-                                            setMessages(prev => prev.map((m, idx) => idx === i ? { ...m, flow: undefined } : m));
+                                            setMessages(prev => prev.map((m, idx) => idx === i ? { ...m, metadata: { ...m.metadata, flow: undefined } } : m));
                                         }}
                                     />
                                 )}
@@ -504,7 +501,7 @@ export const GeniePrompt: React.FC<GeniePromptProps> = ({
                                     }
                                 }}
                                 savedValues={savedValues}
-                                placeholder={mode === 'build' ? "Describe flow (e.g. 'Login with user')..." : "Ask about testing..."}
+                                placeholder={mode === 'build' ? "Tell WebLens AI what to build..." : "Ask WebLens AI about this flow..."}
                                 className="flex-1 bg-transparent border-none outline-none text-sm text-white placeholder-zinc-600 resize-none overflow-hidden min-h-[44px] max-h-[120px] py-2.5 px-3"
                             />
                             <button 

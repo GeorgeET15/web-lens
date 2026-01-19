@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 # --- Unified State ---
 event_queues: Dict[str, queue.Queue] = {}
 execution_history: Dict[str, ExecutionReport] = {}
+MAX_HISTORY_ENTRIES = 100 # Memory safety limit
 # environments: Dict[str, EnvironmentConfig] = {} # Removed for Supabase persistence
 suite_executions: Dict[str, Any] = {}
 
@@ -200,6 +201,12 @@ def execute_flow_background(run_id: str, flow_data: Dict[str, Any], headless: bo
         
         # EXPOSE REPORT LIVE: Add to history immediately so /api/reports/ can fetch current state
         if interpreter.context:
+            # Memory Management: Prune oldest entries if history is too large
+            if len(execution_history) >= MAX_HISTORY_ENTRIES:
+                oldest_id = next(iter(execution_history))
+                del execution_history[oldest_id]
+                logger.info(f"Pruned oldest execution {oldest_id} to maintain memory safety.")
+                
             execution_history[run_id] = interpreter.context.report
             
         result = interpreter.execute_flow(
@@ -268,8 +275,22 @@ def execute_flow_background(run_id: str, flow_data: Dict[str, Any], headless: bo
         q.put({"type": "error", "data": {"message": str(e)}})
     finally:
         if browser_engine:
-            browser_engine.close()
+            try:
+                browser_engine.close()
+            except Exception as e:
+                logger.debug(f"[{run_id}] Cleanup: Error closing browser: {e}")
+        
+        # Cleanup event queue after a short delay to allow final reads
         q.put(None)
+        
+        import threading
+        def delayed_cleanup():
+            time.sleep(600) # Keep for 10 minutes for slower UI receivers
+            if run_id in event_queues:
+                del event_queues[run_id]
+                logger.debug(f"[{run_id}] Cleaned up event queue.")
+                
+        threading.Thread(target=delayed_cleanup, daemon=True).start()
 
 def start_execution(flow_data: Dict[str, Any], headless: bool = True, 
                     variables: Optional[Dict[str, str]] = None, 
@@ -343,8 +364,8 @@ def clear_all_executions(user_id: Optional[str] = None) -> bool:
                 if file.suffix in ['.json', '.html']:
                     try:
                         os.remove(file)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Failed to remove file {file} during history clearing: {e}")
     except Exception as e:
         logger.error(f"Failed to clear local executions directory: {e}")
 

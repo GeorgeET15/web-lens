@@ -1,5 +1,6 @@
 
-import { useState, useMemo, useImperativeHandle, forwardRef, useEffect, memo, useRef } from 'react';
+
+import React, { useState, useMemo, useImperativeHandle, forwardRef, useEffect, memo, useRef } from 'react';
 import { 
   DndContext, 
   closestCenter,
@@ -21,7 +22,8 @@ import {
 } from '@dnd-kit/sortable';
 
 import type { FlowGraph } from '../types/flow';
-import { BaseBlock, BaseBlockOverlay } from './blocks/BaseBlock';
+import { BaseBlock, BaseBlockOverlay, BLOCK_ICONS } from './blocks/BaseBlock';
+import { ElementRef } from '../types/element';
 import { Plus, Minus, Save, FolderOpen, Trash2, X, LocateFixed, Globe, Laptop, Wand2 } from 'lucide-react';
 import { FlowStorage, SavedFlowMetadata } from '../lib/storage';
 import { OnboardingModal } from '../components/OnboardingModal';
@@ -37,12 +39,14 @@ import { AdvancedDeleteFlowDialog } from '../components/dialogs/AdvancedDeleteFl
 import { ScenarioPanel } from '../components/ScenarioPanel';
 import { EditorBlock, BlockType, SavedValue, ScenarioSuiteReport } from './entities';
 import { ScenarioSuiteDashboard } from '../components/execution/ScenarioSuiteDashboard';
-import { GeniePrompt } from '../components/ai/GeniePrompt';
+import { AIPrompt } from '../components/ai/AIPrompt';
 
 import { cn } from '../lib/utils';
 import { Skeleton } from '../components/Skeleton';
 import { DEFAULT_BLOCKS } from './constants';
+import { useToast } from '../components/ToastContext';
 
+export type BlockStatus = 'idle' | 'running' | 'success' | 'failed';
 export interface FlowEditorRef {
   highlightBlockActive: (blockId: string, message?: string) => void;
   highlightBlockSuccess: (blockId: string, message?: string) => void;
@@ -87,13 +91,14 @@ import { Environment } from '../types/environment';
 interface FlowEditorProps {
   onFlowChange?: (flow: FlowGraph | null) => void;
   onValidationError?: (errors: string[]) => void;
-  onRequestPick?: (blockType: string, callback: (element: any) => void) => void;
+  onRequestPick?: (blockType: string, callback: (element: ElementRef) => void, options?: { autoClose?: boolean }) => void;
   highlightBlockId?: string | null;
   onBlockClick?: (id: string) => void;
   showOnboarding?: boolean;
   setShowOnboarding?: (show: boolean) => void;
   onViewScenario?: (runId: string) => void;
   lastReport?: ExecutionReport | null;
+  onSaveStatusChange?: (status: 'saved' | 'saving' | 'unsaved') => void;
   externalVariables?: { key: string, label: string }[];
   environments?: Environment[];
   selectedEnvironmentId?: string;
@@ -122,11 +127,36 @@ const RenderBlockList = memo(({
   savedValues,
   activeFlowIds = new Set<string>(),
   selectionExists = false
-}: any) => {
+}: {
+  blocks: EditorBlock[],
+  parentId?: string,
+  branchKey?: string,
+  blockStatuses: Record<string, any>,
+  blockMessages: Record<string, string>,
+  contextUrl?: string,
+  globalVariables: { id: string, key: string, value: string }[],
+  deleteBlock: (id: string) => void,
+  duplicateBlock: (id: string) => void,
+  updateBlock: (id: string, updates: Partial<EditorBlock>) => void,
+  onAddBlock: (type: BlockType, parentId?: string, branchKey?: 'then' | 'else' | 'body') => void,
+  onRequestPick?: (blockType: string, callback: (element: ElementRef) => void) => void,
+  onMoveToBranch: (id: string, parentId?: string, branchKey?: 'then' | 'else' | 'body') => void,
+  highlightBlockId?: string | null,
+  onBlockClick?: (id: string) => void,
+  activeSnapTarget?: { id: string, type: "then" | "else" | "body" | "bottom" } | null,
+  savedValues: SavedValue[],
+  activeFlowIds?: Set<string>,
+  selectionExists?: boolean
+}) => {
   const levelBlocks = useMemo(() => {
-    const filtered = blocks.filter((b: any) => b.parentId === parentId && b.branchKey === branchKey);
+    const filtered = blocks.filter((b: EditorBlock) => b.parentId === parentId && b.branchKey === branchKey);
     return filtered;
   }, [blocks, parentId, branchKey]);
+
+  // Use a default identity for onRequestPick to simplify child components
+  const activeRequestPick = onRequestPick || (() => {
+    console.warn('onRequestPick not available in this context');
+  });
 
   // Callback for BaseBlock to render its nested lists
   // This avoids passing mixed children arrays and allows BaseBlock to own the structural logic
@@ -158,8 +188,8 @@ const RenderBlockList = memo(({
   if (!parentId) {
       // Root Level - High Contrast Spatial Rendering
       return (
-          <SortableContext items={levelBlocks.map((b: any) => b.id)} strategy={rectSortingStrategy}>
-            {levelBlocks.map((block: any, index: number) => {
+          <SortableContext items={levelBlocks.map((b: EditorBlock) => b.id)} strategy={rectSortingStrategy}>
+            {levelBlocks.map((block: EditorBlock, index: number) => {
                 const effectivePos = block.position || { x: 100, y: 100 + (index * 125) };
                 
                 return (
@@ -173,18 +203,18 @@ const RenderBlockList = memo(({
                     onDuplicate={duplicateBlock}
                     onUpdate={updateBlock}
                     onAddBlock={onAddBlock}
-                    onRequestPick={onRequestPick}
+                    onRequestPick={activeRequestPick}
                     branchKey={branchKey}
                     onMoveToBranch={onMoveToBranch}
                     isActive={highlightBlockId === block.id}
                     isHighlighted={activeFlowIds.has(block.id)}
                     isSnapped={activeSnapTarget?.id === block.id}
-                    snapType={activeSnapTarget?.id === block.id ? activeSnapTarget.type : undefined}
+                    snapType={activeSnapTarget?.id === block.id ? (activeSnapTarget.type as "then" | "else" | "body" | "bottom") : undefined}
                     selectionExists={selectionExists}
                     onClick={() => onBlockClick?.(block.id)}
                     availableBranches={blocks
-                        .filter((b: any) => (b.type === 'if_condition' || b.type === 'repeat_until') && b.id !== block.id)
-                        .map((b: any) => ({ id: b.id, label: b.label, type: b.type }))
+                        .filter((b: EditorBlock) => (b.type === 'if_condition' || b.type === 'repeat_until') && b.id !== block.id)
+                        .map((b: EditorBlock) => ({ id: b.id, label: b.label, type: b.type }))
                     }
                     savedValues={savedValues}
                     blocks={blocks}
@@ -197,9 +227,9 @@ const RenderBlockList = memo(({
   }
 
   return (
-    <SortableContext items={levelBlocks.map((b: any) => b.id)} strategy={verticalListSortingStrategy}>
+    <SortableContext items={levelBlocks.map((b: EditorBlock) => b.id)} strategy={verticalListSortingStrategy}>
       <div className="space-y-0">
-        {levelBlocks.map((block: any) => (
+        {levelBlocks.map((block: EditorBlock) => (
           <BaseBlock
             key={block.id}
             id={block.id}
@@ -210,7 +240,7 @@ const RenderBlockList = memo(({
             onDuplicate={duplicateBlock}
             onUpdate={updateBlock}
             onAddBlock={onAddBlock}
-            onRequestPick={onRequestPick}
+            onRequestPick={activeRequestPick}
             branchKey={branchKey}
             onMoveToBranch={onMoveToBranch}
             isActive={highlightBlockId === block.id}
@@ -220,8 +250,8 @@ const RenderBlockList = memo(({
             selectionExists={selectionExists}
             onClick={() => onBlockClick?.(block.id)}
             availableBranches={blocks
-                .filter((b: any) => (b.type === 'if_condition' || b.type === 'repeat_until') && b.id !== block.id)
-                .map((b: any) => ({ id: b.id, label: b.label, type: b.type }))
+                .filter((b: EditorBlock) => (b.type === 'if_condition' || b.type === 'repeat_until') && b.id !== block.id)
+                .map((b: EditorBlock) => ({ id: b.id, label: b.label, type: b.type }))
             }
             savedValues={savedValues}
             blocks={blocks}
@@ -239,11 +269,14 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
     showOnboarding,
     setShowOnboarding,
     onViewScenario,
+    onSaveStatusChange,
     externalVariables = [],
     environments = [],
     selectedEnvironmentId = '',
     onAutoLaunch
   }, ref) => {
+    const { addToast } = useToast();
+
     // State for blocks
     const [blocks, setBlocks] = useState<EditorBlock[]>([]);
     const [flowName, setFlowName] = useState('My Test Flow');
@@ -265,15 +298,22 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
     const [isProcessing, setIsProcessing] = useState(false);
     const [processingMessage, setProcessingMessage] = useState('Processing...');
     
-    // Genie AI Side Panel
-    const [isGenieOpen, setIsGenieOpen] = useState(false);
-    const [genieWidth, setGenieWidth] = useState(() => {
-        const saved = localStorage.getItem('flow-genie-width');
+    // WebLens AI Side Panel
+    const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
+    const [aiPanelWidth, setAIPanelWidth] = useState(() => {
+        const saved = localStorage.getItem('flow-ai-panel-width');
         return saved ? parseInt(saved, 10) : 400;
     });
-    const [isResizingGenie, setIsResizingGenie] = useState(false);
+    const [isResizingAIPanel, setIsResizingAIPanel] = useState(false);
     const [flowSource, setFlowSource] = useState<'local' | 'cloud' | null>(null);
     const [chatHistory, setChatHistory] = useState<any>(null);
+    const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+    const [lastSavedContent, setLastSavedContent] = useState<string>('');
+
+    // Sync saveStatus to parent
+    useEffect(() => {
+        onSaveStatusChange?.(saveStatus);
+    }, [saveStatus, onSaveStatusChange]);
 
     // Block search
     const [blockSearchQuery, setBlockSearchQuery] = useState('');
@@ -288,7 +328,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
     const [pendingLoadFlow, setPendingLoadFlow] = useState<{flow: FlowGraph, id: string, isTemplate: boolean} | null>(null);
 
     const [activeDragId, setActiveDragId] = useState<string | null>(null);
-    const [blockStatuses, setBlockStatuses] = useState<Record<string, 'idle' | 'running' | 'success' | 'failed'>>({});
+    const [blockStatuses, setBlockStatuses] = useState<Record<string, BlockStatus>>({});
     const [blockMessages, setBlockMessages] = useState<Record<string, string>>({});
     const [isPanning, setIsPanning] = useState(false);
     const [activeSnapTarget, setActiveSnapTarget] = useState<{ id: string, type: 'bottom' | 'then' | 'else' | 'body' } | null>(null);
@@ -305,7 +345,6 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
         coordinateGetter: sortableKeyboardCoordinates,
       })
     );
-
     // Initial blocks
     useEffect(() => {
         if (blocks.length === 0) {
@@ -315,6 +354,47 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
             setBlocks(initialBlocks);
         }
     }, [])
+
+    // --- Debounced Auto-Save ---
+    useEffect(() => {
+        // Only auto-save if we have a currentFlowId and we know where to save it
+        if (!currentFlowId || !flowSource) return;
+
+        // Don't auto-save if we're already processing (e.g. manual save or load)
+        if (isProcessing) return;
+
+        const currentContent = JSON.stringify({ blocks, flowName, flowDescription, globalVariables, scenarioSets });
+        
+        // Skip if nothing changed since last save
+        if (currentContent === lastSavedContent) {
+            setSaveStatus('saved');
+            return;
+        }
+
+        setSaveStatus('unsaved');
+
+        const timer = setTimeout(async () => {
+            setSaveStatus('saving');
+            try {
+                const flow = FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, 1, currentFlowId, flowDescription, chatHistory);
+                
+                if (flowSource === 'cloud') {
+                    await FlowStorage.saveCloud(flow);
+                } else {
+                    FlowStorage.save(flow, currentFlowId);
+                }
+                
+                setLastSavedContent(currentContent);
+                setSaveStatus('saved');
+                console.log(`[Auto-save] Flow ${currentFlowId} synced to ${flowSource}`);
+            } catch (err) {
+                console.error('[Auto-save] Failed:', err);
+                setSaveStatus('unsaved'); // Stay unsaved so it tries again on next change
+            }
+        }, 2000); // 2 second debounce
+
+        return () => clearTimeout(timer);
+    }, [blocks, flowName, flowDescription, globalVariables, scenarioSets, currentFlowId, flowSource]);
 
     // Expose highlighting methods
     const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -347,11 +427,20 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
     }, [environments, selectedEnvironmentId, globalVariables, externalVariables]);
 
     useEffect(() => {
-      const flow = FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, schemaVersion, undefined, undefined, chatHistory);
+      const flow = FlowTransformer.toCanonical(
+        flowName, 
+        blocks, 
+        globalVariables, 
+        scenarioSets, 
+        schemaVersion, 
+        currentFlowId || undefined, 
+        flowDescription, 
+        chatHistory
+      );
       
       onFlowChange?.(flow);
       onValidationError?.([]); 
-    }, [blocks, flowName, globalVariables, schemaVersion]);
+    }, [blocks, flowName, globalVariables, scenarioSets, schemaVersion, currentFlowId, flowDescription, chatHistory]);
 
     const normalizedSavedValues: SavedValue[] = useMemo(() => {
         const globalVars = globalVariables.map(v => ({ key: v.key, label: v.key || 'Untitled' }));
@@ -451,31 +540,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
             resetToNewFlow();
         },
         loadFlow: (flow) => {
-            const state = FlowTransformer.toEditorState(flow);
-            setBlocks(state.blocks);
-            setFlowName(state.name);
-            setFlowDescription(state.description || '');
-            setGlobalVariables(state.variables);
-            setScenarioSets(state.scenarioSets);
-            setSchemaVersion(state.schemaVersion);
-            setCurrentFlowId(flow.id || null);
-            setIsLoadModalOpen(false);
-            if (flow.id) {
-                FlowStorage.trackUsage(flow.id);
-                // Also track on cloud if it's a cloud flow
-                const isCloud = savedFlows.find(f => f.id === flow.id)?.sources?.includes('cloud');
-                if (isCloud) {
-                    FlowStorage.trackUsageCloud(flow.id);
-                    setFlowSource('cloud');
-                } else {
-                    setFlowSource('local');
-                }
-                setChatHistory(flow.chat_history || {});
-            } else {
-                setFlowSource(null);
-                setChatHistory({});
-            }
-            resetView();
+            performLoad(flow, flow.id || null, false);
         },
         exportFlow: (format?: 'weblens' | 'playwright-python' | 'playwright-java' | 'selenium-python' | 'selenium-java') => {
             handleExport(format);
@@ -487,15 +552,25 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
 
     // Real-time Chat Sync Effect
     useEffect(() => {
-        if (flowSource === 'cloud' && currentFlowId && chatHistory) {
-            const timer = setTimeout(async () => {
+        if (!currentFlowId || !chatHistory) return;
+        
+        console.log(`[FlowEditor] Chat sync effect triggered. Source: ${flowSource}, ID: ${currentFlowId}`, chatHistory);
+
+        // If chat is cleared (0 messages), sync immediately. Otherwise debounce.
+        const delay = (chatHistory.messages?.length === 0) ? 0 : 3000;
+
+        const timer = setTimeout(async () => {
+            if (flowSource === 'cloud') {
                 await FlowStorage.syncChatToCloud(currentFlowId, chatHistory);
-            }, 3000); // 3s debounce for real-time feel without spamming
-            return () => clearTimeout(timer);
-        }
+            } else {
+                FlowStorage.syncChatLocally(currentFlowId, chatHistory);
+            }
+        }, delay);
+        
+        return () => clearTimeout(timer);
     }, [chatHistory, flowSource, currentFlowId]);
 
-    // Resizing Logic for Sidebar and Genie
+    // Resizing Logic for Sidebar and AI Panel
     useEffect(() => {
       const handleMouseMove = (e: MouseEvent) => {
         if (isResizingSidebar) {
@@ -506,23 +581,23 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
               setSidebarWidth(newWidth);
               localStorage.setItem('flow-sidebar-width', newWidth.toString());
             }
-        } else if (isResizingGenie) {
+        } else if (isResizingAIPanel) {
             const newWidth = window.innerWidth - e.clientX;
             const minWidth = 300;
             const maxWidth = 800;
             if (newWidth >= minWidth && newWidth <= maxWidth) {
-                setGenieWidth(newWidth);
-                localStorage.setItem('flow-genie-width', newWidth.toString());
+                setAIPanelWidth(newWidth);
+                localStorage.setItem('flow-ai-panel-width', newWidth.toString());
             }
         }
       };
 
       const handleMouseUp = () => {
         setIsResizingSidebar(false);
-        setIsResizingGenie(false);
+        setIsResizingAIPanel(false);
       };
 
-      if (isResizingSidebar || isResizingGenie) {
+      if (isResizingSidebar || isResizingAIPanel) {
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
         document.body.style.cursor = 'col-resize';
@@ -538,7 +613,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
       };
-    }, [isResizingSidebar, isResizingGenie]);
+    }, [isResizingSidebar, isResizingAIPanel]);
 
     // Handlers
     function handleDragStart(event: DragStartEvent) {
@@ -612,7 +687,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
               } else {
                   // Inside a branch
                   newParentId = target.id;
-                  newBranchKey = activeSnapTarget.type as any;
+                  newBranchKey = (activeSnapTarget.type as 'then' | 'else' | 'body');
               }
 
               const activeIdx = prev.findIndex(b => b.id === active.id);
@@ -782,7 +857,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
                 let current = prev.find(b => b.id === parentId);
                 while (current) {
                     if (current.id === blockId) {
-                        if ((window as any).addToast) (window as any).addToast('error', 'Cannot move block into its own descendant');
+                        addToast('error', 'Cannot move block into its own descendant');
                         return prev; 
                     }
                     current = prev.find(b => b.id === current?.parentId);
@@ -816,18 +891,21 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
                 const cloudRes = await FlowStorage.saveCloud(flow);
                 if (cloudRes) {
                     setCurrentFlowId(cloudRes.id);
-                    if ((window as any).addToast) (window as any).addToast('success', 'Flow saved to cloud');
+                    addToast('success', 'Flow saved to cloud');
                 }
             } else {
                 const saved = FlowStorage.save(flow, currentFlowId || undefined);
                 setCurrentFlowId(saved.id);
-                if ((window as any).addToast) (window as any).addToast('success', 'Flow saved locally');
+                addToast('success', 'Flow saved locally');
             }
+            
+            // Update last saved content to prevent immediate auto-save trigger
+            const currentContent = JSON.stringify({ blocks, flowName, flowDescription, globalVariables, scenarioSets });
+            setLastSavedContent(currentContent);
+            setSaveStatus('saved');
         } catch (e) {
             console.error(e);
-            if ((window as any).addToast) {
-                (window as any).addToast('error', `Failed to save flow to ${location}`);
-            }
+            addToast('error', `Failed to save flow to ${location}`);
         } finally {
             setIsProcessing(false);
         }
@@ -866,7 +944,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
             });
             
             
-            const sortedFlows = Array.from(mergedMap.values()).sort((a: any, b: any) => {
+            const sortedFlows = Array.from(mergedMap.values()).sort((a, b) => {
                 const usedA = a.lastUsedAt || 0;
                 const usedB = b.lastUsedAt || 0;
                 
@@ -883,26 +961,26 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
         }
     };
 
-    const handleLoadFlow = async (id: string, isTemplate: boolean = false, source?: 'local' | 'cloud') => {
+    const handleLoadFlow = async (idOrFlow: string | FlowGraph, isTemplate: boolean = false, source?: 'local' | 'cloud') => {
         let flow: FlowGraph | null = null;
+        const id = typeof idOrFlow === 'string' ? idOrFlow : (idOrFlow as FlowGraph).id || '';
+        
         setIsProcessing(true);
         setProcessingMessage('Loading Flow...');
         
         try {
-            if (isTemplate) {
-                flow = id as any;
+            if (typeof idOrFlow !== 'string') {
+                flow = idOrFlow;
             } else if (source === 'cloud') {
-                flow = await FlowStorage.loadCloud(id);
+                flow = await FlowStorage.loadCloud(idOrFlow);
             } else {
-                flow = FlowStorage.load(id);
+                flow = FlowStorage.load(idOrFlow);
             }
 
-            if (ref && 'current' in ref && ref.current && flow) {
-                // Ensure ID is carried over (critical for usage tracking)
-                if (!flow.id) flow.id = id;
-                
-                await ref.current.loadFlow(flow);
-            }
+            if (!flow) return;
+            
+            // Ensure ID is carried over (critical for usage tracking)
+            if (!flow.id && typeof idOrFlow === 'string') flow.id = idOrFlow;
         } catch (e) {
             console.error('Failed to load flow:', e);
         } finally {
@@ -920,14 +998,11 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
         performLoad(flow, id, isTemplate);
     };
 
-    const performLoad = (flow: FlowGraph, id: string, isTemplate: boolean) => {
-
+    function performLoad(flow: FlowGraph, id: string | null, isTemplate: boolean) {
         try {
             const { blocks: newBlocks, name, variables, scenarioSets: newSets, schemaVersion, description } = FlowTransformer.toEditorState(flow);
-            console.log('[FlowEditor] Loaded flow:', name, 'Schema:', schemaVersion);
             
-            // Architectural Refinement: Orphan Cleanup
-            // Remove blocks with a parentId that doesn't exist in the set of IDs
+            // Orphan Cleanup
             const allIds = new Set(newBlocks.map(b => b.id));
             const cleanedBlocks = newBlocks.filter(b => !b.parentId || allIds.has(b.parentId));
             
@@ -937,27 +1012,42 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
             setGlobalVariables(variables);
             setScenarioSets(newSets || []);
             setSchemaVersion(schemaVersion);
+            resetView();
             
             if (isTemplate) {
                 setCurrentFlowId(null);
                 setShowOnboarding?.(false);
                 setChatHistory({});
+                setFlowSource(null);
             } else {
                 setCurrentFlowId(id);
                 setIsLoadModalOpen(false);
                 setChatHistory(flow.chat_history || {});
-            }
 
+                if (id) {
+                    FlowStorage.trackUsage(id);
+                    const isCloud = savedFlows.find(f => f.id === id)?.sources?.includes('cloud');
+                    if (isCloud) {
+                        FlowStorage.trackUsageCloud(id);
+                        setFlowSource('cloud');
+                    } else {
+                        setFlowSource('local');
+                    }
+                }
+            }
+            
+            // Mark as saved after initial load
+            const currentContent = JSON.stringify({ blocks: newBlocks, name, variables, scenarioSets: newSets || [] });
+            setLastSavedContent(currentContent);
+            setSaveStatus('saved');
         } catch (e) {
             console.error(e);
-            if ((window as any).addToast) {
-                (window as any).addToast('error', 'Failed to load flow: Incompatible data version.');
-            }
+            addToast('error', 'Failed to load flow: Incompatible data version.');
         }
-    };
+    }
 
     const handleLoadTemplate = (flow: FlowGraph) => {
-         handleLoadFlow(flow as any, true);
+         handleLoadFlow(flow, true);
     };
 
     const handleExport = async (format: 'weblens' | 'playwright-python' | 'playwright-java' | 'selenium-python' | 'selenium-java' = 'weblens') => {
@@ -985,9 +1075,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
                 const weblensContent = await encodeWeblens(flow, flowName, flowDescription);
                 downloadWeblens(weblensContent, safeFilename);
 
-                if ((window as any).addToast) {
-                    (window as any).addToast('success', `Flow exported as ${safeFilename}.weblens`);
-                }
+                addToast('success', `Flow exported as ${safeFilename}.weblens`);
             } else {
                 // Generate code (Playwright or Selenium)
                 const { CodeGenerator } = await import('../utils/codeGenerators');
@@ -1008,15 +1096,11 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
 
-                if ((window as any).addToast) {
-                    (window as any).addToast('success', `Flow exported as ${formatLabel} code`);
-                }
+                addToast('success', `Flow exported as ${formatLabel} code`);
             }
         } catch (e) {
             console.error(e);
-            if ((window as any).addToast) {
-                (window as any).addToast('error', 'Failed to export flow');
-            }
+            addToast('error', 'Failed to export flow');
         } finally {
             setIsProcessing(false);
         }
@@ -1044,14 +1128,10 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
             // Load the imported flow
             performLoad(flow, crypto.randomUUID(), false);
             
-            if ((window as any).addToast) {
-                (window as any).addToast('success', `Imported: ${metadata.flow_name}`);
-            }
-        } catch (e: any) {
+            addToast('success', `Imported: ${metadata.flow_name}`);
+        } catch (e) {
             console.error(e);
-            if ((window as any).addToast) {
-                (window as any).addToast('error', e.message || 'Failed to import flow');
-            }
+            addToast('error', e instanceof Error ? e.message : 'Failed to import flow');
         } finally {
             setIsProcessing(false);
             // Reset file input
@@ -1216,7 +1296,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
                         className="flex items-center gap-3 w-full p-3 rounded-lg border border-white/5 bg-zinc-900/50 hover:bg-zinc-800 hover:border-white/10 transition-all text-left group"
                       >
                         <div className="p-1.5 rounded bg-black text-zinc-500 group-hover:bg-white group-hover:text-black transition-all border border-white/5 shadow-inner">
-                          <Plus className="w-3.5 h-3.5" />
+                          {React.cloneElement(BLOCK_ICONS[type] as React.ReactElement, { className: 'w-3.5 h-3.5' })}
                         </div>
                         <span className="text-[11px] font-black uppercase tracking-wider text-zinc-400 group-hover:text-white transition-colors">
                           {DEFAULT_BLOCKS[type].label}
@@ -1239,7 +1319,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
                         className="flex items-center gap-3 w-full p-3 rounded-lg border border-white/5 bg-zinc-900/50 hover:bg-zinc-800 hover:border-white/10 transition-all text-left group"
                       >
                         <div className="p-1.5 rounded bg-black text-zinc-500 group-hover:bg-white group-hover:text-black transition-all border border-white/5 shadow-inner">
-                          <Plus className="w-3.5 h-3.5" />
+                          {React.cloneElement(BLOCK_ICONS[type] as React.ReactElement, { className: 'w-3.5 h-3.5' })}
                         </div>
                         <span className="text-[11px] font-black uppercase tracking-wider text-zinc-400 group-hover:text-white transition-colors">
                           {DEFAULT_BLOCKS[type].label}
@@ -1262,7 +1342,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
                         className="flex items-center gap-3 w-full p-3 rounded-lg border border-white/5 bg-zinc-900/50 hover:bg-zinc-800 hover:border-white/10 transition-all text-left group"
                       >
                         <div className="p-1.5 rounded bg-black text-zinc-500 group-hover:bg-white group-hover:text-black transition-all border border-white/5 shadow-inner">
-                          <Plus className="w-3.5 h-3.5" />
+                          {React.cloneElement(BLOCK_ICONS[type] as React.ReactElement, { className: 'w-3.5 h-3.5' })}
                         </div>
                         <span className="text-[11px] font-black uppercase tracking-wider text-zinc-400 group-hover:text-white transition-colors">
                           {DEFAULT_BLOCKS[type].label}
@@ -1285,7 +1365,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
                         className="flex items-center gap-3 w-full p-3 rounded-lg border border-white/5 bg-zinc-900/50 hover:bg-zinc-800 hover:border-white/10 transition-all text-left group"
                       >
                         <div className="p-1.5 rounded bg-black text-zinc-500 group-hover:bg-white group-hover:text-black transition-all border border-white/5 shadow-inner">
-                          <Plus className="w-3.5 h-3.5" />
+                          {React.cloneElement(BLOCK_ICONS[type] as React.ReactElement, { className: 'w-3.5 h-3.5' })}
                         </div>
                         <span className="text-[11px] font-black uppercase tracking-wider text-zinc-400 group-hover:text-white transition-colors">
                           {DEFAULT_BLOCKS[type].label}
@@ -1299,7 +1379,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
                 <div>
                   <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 cursor-default select-none">Verification</h2>
                   <div className="grid gap-2">
-                    {(['wait_until_visible', 'assert_visible', 'verify_text', 'verify_page_content', 'verify_page_title', 'verify_url', 'verify_element_enabled', 'verify_network_request', 'verify_performance', 'observe_network'] as BlockType[])
+                    {(['wait_until_visible', 'assert_visible', 'verify_text', 'verify_page_content', 'verify_page_title', 'verify_url', 'verify_element_enabled', 'verify_network_request', 'verify_performance', 'visual_verify', 'observe_network'] as BlockType[])
                       .filter(type => DEFAULT_BLOCKS[type].label.toLowerCase().includes(blockSearchQuery.toLowerCase()))
                       .map(type => (
                       <button
@@ -1308,7 +1388,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
                         className="flex items-center gap-3 w-full p-3 rounded-lg border border-white/5 bg-zinc-900/50 hover:bg-zinc-800 hover:border-white/10 transition-all text-left group"
                       >
                         <div className="p-1.5 rounded bg-black text-zinc-500 group-hover:bg-white group-hover:text-black transition-all border border-white/5 shadow-inner">
-                          <Plus className="w-3.5 h-3.5" />
+                          {React.cloneElement(BLOCK_ICONS[type] as React.ReactElement, { className: 'w-3.5 h-3.5' })}
                         </div>
                         <span className="text-[11px] font-black uppercase tracking-wider text-zinc-400 group-hover:text-white transition-colors">
                           {DEFAULT_BLOCKS[type].label}
@@ -1331,7 +1411,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
                         className="flex items-center gap-3 w-full p-3 rounded-lg border border-white/5 bg-zinc-900/50 hover:bg-zinc-800 hover:border-white/10 transition-all text-left group"
                       >
                         <div className="p-1.5 rounded bg-black text-zinc-500 group-hover:bg-white group-hover:text-black transition-all border border-white/5 shadow-inner">
-                          <Plus className="w-3.5 h-3.5" />
+                          {React.cloneElement(BLOCK_ICONS[type] as React.ReactElement, { className: 'w-3.5 h-3.5' })}
                         </div>
                         <span className="text-[11px] font-black uppercase tracking-wider text-zinc-400 group-hover:text-white transition-colors">
                           {DEFAULT_BLOCKS[type].label}
@@ -1354,7 +1434,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
                         className="flex items-center gap-3 w-full p-3 rounded-lg border border-white/5 bg-gray-800/50 hover:bg-gray-800 hover:border-indigo-500/30 transition-all text-left group"
                       >
                         <div className="p-1.5 rounded bg-gray-900 text-gray-400 group-hover:text-indigo-400">
-                          <Plus className="w-3.5 h-3.5" />
+                          {React.cloneElement(BLOCK_ICONS[type] as React.ReactElement, { className: 'w-3.5 h-3.5' })}
                         </div>
                         <span className="text-sm font-medium text-gray-300 group-hover:text-white">
                           {DEFAULT_BLOCKS[type].label}
@@ -1427,8 +1507,25 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
               
               <div className="border-t border-white/10 p-4 space-y-4 bg-black flex-none">
 
-                 <div className="space-y-1.5">
-                     <label className="text-[9px] uppercase text-zinc-600 font-black tracking-widest">Flow Name</label>
+                  <div className="space-y-1.5">
+                     <div className="flex items-center justify-between">
+                         <label className="text-[9px] uppercase text-zinc-600 font-black tracking-widest">Flow Name</label>
+                         {currentFlowId && (
+                             <div className="flex items-center gap-1.5">
+                                 <div className={cn(
+                                     "w-1 h-1 rounded-full",
+                                     saveStatus === 'saved' ? "bg-emerald-500" : 
+                                     saveStatus === 'saving' ? "bg-amber-500 animate-pulse" : 
+                                     "bg-zinc-700"
+                                 )} />
+                                 <span className="text-[8px] font-black uppercase tracking-tight text-zinc-600">
+                                     {saveStatus === 'saved' ? 'Synced' : 
+                                      saveStatus === 'saving' ? 'Syncing...' : 
+                                      'Unsaved Changes'}
+                                 </span>
+                             </div>
+                         )}
+                     </div>
                      <input
                       value={flowName}
                       onChange={e => setFlowName(e.target.value)}
@@ -1612,14 +1709,14 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
              </button>
 
              <button 
-                onClick={() => setIsGenieOpen(!isGenieOpen)}
+                onClick={() => setIsAIPanelOpen(!isAIPanelOpen)}
                 className={cn(
                     "flex items-center justify-center p-3 bg-zinc-950 border rounded-xl transition-all shadow-[0_10px_40px_rgba(0,0,0,0.5)] active:scale-95 group",
-                    isGenieOpen ? "border-indigo-500 text-indigo-400" : "border-white/10 text-zinc-400 hover:text-white hover:bg-zinc-900"
+                    isAIPanelOpen ? "border-indigo-500 text-indigo-400" : "border-white/10 text-zinc-400 hover:text-white hover:bg-zinc-900"
                 )}
-                title="Toggle Genie AI"
+                title="Toggle WebLens AI"
              >
-                <Wand2 className={cn("w-4 h-4 transition-transform", isGenieOpen ? "scale-110" : "group-hover:rotate-12")} />
+                <Wand2 className={cn("w-4 h-4 transition-transform", isAIPanelOpen ? "scale-110" : "group-hover:rotate-12")} />
              </button>
 
              
@@ -1676,24 +1773,24 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
                             <div className="text-center py-12 text-zinc-600 text-[10px] font-black uppercase tracking-widest italic opacity-50">No saved flows available</div>
                         ) : (
                             savedFlows.map(f => (
-                                <div key={f.id} className="flex items-center justify-between p-4 rounded-xl hover:bg-white/5 group border border-transparent hover:border-white/10 transition-all cursor-pointer shadow-sm active:scale-[0.98]" onClick={() => handleLoadFlow(f.id, false, (f as any).primarySource)}>
+                                <div key={f.id} className="flex items-center justify-between p-4 rounded-xl hover:bg-white/5 group border border-transparent hover:border-white/10 transition-all cursor-pointer shadow-sm active:scale-[0.98]" onClick={() => handleLoadFlow(f.id, false, f.primarySource)}>
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1">
                                             <div className="text-[11px] font-black uppercase tracking-widest text-zinc-300 group-hover:text-white transition-colors truncate">{f.name}</div>
                                             <div className="flex gap-1">
-                                                {(f as any).sources?.includes('cloud') && (
+                                                {f.sources?.includes('cloud') && (
                                                     <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-black uppercase tracking-widest border border-indigo-500/20">
                                                         <Globe className="w-2.5 h-2.5" />
                                                         Cloud
                                                     </span>
                                                 )}
-                                                {(f as any).sources?.includes('local') && (
+                                                {f.sources?.includes('local') && (
                                                     <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-500/10 text-zinc-500 text-[8px] font-black uppercase tracking-widest border border-zinc-500/20">
                                                         <Laptop className="w-2.5 h-2.5" />
                                                         Local
                                                     </span>
                                                 )}
-                                                {!(f as any).sources && (f.source === 'cloud' ? (
+                                                {!f.sources && (f.source === 'cloud' ? (
                                                      <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[8px] font-black uppercase tracking-widest border border-indigo-500/20">
                                                         <Globe className="w-2.5 h-2.5" />
                                                         Cloud
@@ -1856,34 +1953,35 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
         
         </div>
 
-        {/* Right Sidebar - Genie AI */}
+        {/* Right Sidebar - WebLens AI */}
         <div 
-          style={{ width: isGenieOpen ? `${genieWidth}px` : '0px' }}
+          style={{ width: isAIPanelOpen ? `${aiPanelWidth}px` : '0px' }}
           className={cn(
             "flex flex-col border-l border-zinc-900 bg-black relative z-40 overflow-hidden",
-            isGenieOpen ? "opacity-100" : "opacity-0 pointer-events-none",
-            !isResizingGenie && "transition-all duration-300"
+            isAIPanelOpen ? "opacity-100" : "opacity-0 pointer-events-none",
+            !isResizingAIPanel && "transition-all duration-300"
           )}
         >
           {/* Resize Handle */}
-          {isGenieOpen && (
+          {isAIPanelOpen && (
               <div 
                 className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize z-[100]"
                 onMouseDown={(e) => {
                     e.preventDefault();
-                    setIsResizingGenie(true);
+                    setIsResizingAIPanel(true);
                 }}
               />
           )}
 
-          <GeniePrompt 
+          <AIPrompt 
+                key={currentFlowId || 'new-flow'}
                 isSidePanel 
-                onFlowGenerated={(flow) => {
+                onFlowGenerated={(flow: FlowGraph) => {
                     performLoad(flow, crypto.randomUUID(), false);
                 }}
-                addToast={(window as any).addToast}
+                addToast={addToast}
                 variables={activeVariables}
-                onClose={() => setIsGenieOpen(false)}
+                onClose={() => setIsAIPanelOpen(false)}
                 chatHistory={chatHistory}
                 onChatUpdate={setChatHistory}
                 currentFlow={FlowTransformer.toCanonical(flowName, blocks, globalVariables, scenarioSets, schemaVersion, currentFlowId || undefined, flowDescription, chatHistory)}
@@ -1893,7 +1991,7 @@ export const FlowEditor = forwardRef<FlowEditorRef, FlowEditorProps>(
         </div>
 
         {/* Global Resize Overlay */}
-        {(isResizingSidebar || isResizingGenie) && (
+        {(isResizingSidebar || isResizingAIPanel) && (
             <div className="fixed inset-0 z-[9999] cursor-col-resize" />
         )}
       </div>
