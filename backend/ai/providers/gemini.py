@@ -26,12 +26,9 @@ class GeminiProvider(LLMProvider):
         return await self.generate_multimodal(prompt, [])
 
     async def generate_multimodal(self, prompt: str, images_base64: List[str]) -> Optional[str]:
-        current_loop = asyncio.get_running_loop()
-        
-        # If the loop has changed or LLM is not initialized, (re)initialize
-        if not self._llm or getattr(self, "_bound_loop", None) != current_loop:
+        # Lazy Init
+        if not self._llm:
             self._init_llm()
-            self._bound_loop = current_loop
 
         try:
             from langchain_core.messages import HumanMessage
