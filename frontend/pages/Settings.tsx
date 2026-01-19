@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { User, Shield, Clock, LogOut, Cpu, Key, Server, Save, ChevronDown, Check } from 'lucide-react';
+import { User, Shield, Clock, LogOut, Cpu, Key, Server, Save, ChevronDown, Check, Trash2 } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
 import { api } from '../lib/api';
 import { API_ENDPOINTS } from '../config/api';
@@ -186,15 +186,24 @@ export default function Settings() {
 
                 <div className="col-span-1 md:col-span-2 space-y-1">
                     <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">API Key</label>
-                    <div className="relative">
-                        <Key className="absolute left-3 top-2.5 w-4 h-4 text-zinc-600" />
-                        <input 
-                            type="password" 
-                            value={aiConfig.apiKey}
-                            onChange={(e) => setAiConfig({...aiConfig, apiKey: e.target.value})}
-                            placeholder="sk-..."
-                            className="w-full bg-black/40 border border-white/10 rounded-lg pl-10 pr-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50 placeholder-zinc-700 font-mono"
-                        />
+                    <div className="flex gap-2">
+                        <div className="relative flex-1">
+                            <Key className="absolute left-3 top-2.5 w-4 h-4 text-zinc-600" />
+                            <input 
+                                type="password" 
+                                value={aiConfig.apiKey}
+                                onChange={(e) => setAiConfig({...aiConfig, apiKey: e.target.value})}
+                                placeholder="sk-..."
+                                className="w-full bg-black/40 border border-white/10 rounded-lg pl-10 pr-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500/50 placeholder-zinc-700 font-mono"
+                            />
+                        </div>
+                        <button
+                            onClick={() => setAiConfig({...aiConfig, apiKey: ''})}
+                            className="px-3 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-500 hover:bg-rose-500/20 rounded-lg transition-colors"
+                            title="Clear API Key"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </button>
                     </div>
                     <p className="text-[10px] text-zinc-600">
                         Top Secret. Stored locally in your browser. Never saved to our servers.

@@ -9,8 +9,12 @@ logger = logging.getLogger(__name__)
 
 class GeminiProvider(LLMProvider):
     def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None):
-        # Prefer injected key, fallback to env vars
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        # Prefer injected key (even if empty string to disable), fallback to env vars only if None
+        if api_key is not None:
+             self.api_key = api_key
+        else:
+             self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+
         self.model_name = model_name or "gemini-2.5-flash"
         self._llm = None
         
