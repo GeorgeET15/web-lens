@@ -39,3 +39,8 @@ WebLens.AppDir/
 
 # Ignore the compiled 'weblens' binary itself
 weblens
+
+# Build directories
+dist_deb/
+backend/dist/
+backend/build/
