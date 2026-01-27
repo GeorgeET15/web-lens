@@ -54,10 +54,10 @@ export default function Index() {
 
               <div className="flex flex-wrap gap-4 pt-2">
                 <Button size="sm" className="h-10 px-6 bg-primary hover:bg-primary/90 text-white rounded-none text-[10px] font-bold tracking-widest" asChild>
-                  <Link to="/docs" className="gap-2">
-                    Download Free
+                  <a href="https://github.com/GeorgeET15/web-lens/releases/tag/v1.0.0" target="_blank" rel="noopener noreferrer" className="gap-2">
+                    Download for Linux (.deb)
                     <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
+                  </a>
                 </Button>
                 <Button size="sm" variant="outline" className="h-10 px-6 border-border hover:bg-secondary rounded-none text-[10px] font-bold tracking-widest" asChild>
                   <Link to="/how-it-works">
@@ -236,7 +236,7 @@ export default function Index() {
           </p>
           <div className="flex justify-center gap-4 pt-4">
             <Button size="sm" className="h-10 px-8 bg-primary hover:bg-primary/90 text-white rounded-none font-bold text-[10px] tracking-widest" asChild>
-              <Link to="/docs">Download Now</Link>
+              <a href="https://github.com/GeorgeET15/web-lens/releases/tag/v1.0.0" target="_blank" rel="noopener noreferrer">Download Limitless</a>
             </Button>
             <Button size="sm" variant="outline" className="h-10 px-8 border-border rounded-none font-bold hover:bg-secondary text-[10px] tracking-widest" asChild>
               <Link to="/docs">Read Documentation</Link>
