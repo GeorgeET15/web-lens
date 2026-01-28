@@ -24,7 +24,11 @@ a = Analysis(
         # Platform-specific chromedriver will be added during build
     ],
     datas=[
-        ('backend', 'backend'),
+        ('backend/*.py', 'backend'),
+        ('backend/*.js', 'backend'),
+        ('backend/*.html', 'backend'),
+        ('backend/ai', 'backend/ai'),
+        ('backend/services', 'backend/services'),
         ('frontend/dist', 'frontend'),
     ],
     hiddenimports=[
@@ -62,13 +66,30 @@ a = Analysis(
         'google.generativeai',
         'langchain_core',
         'langchain_core.language_models.chat_models',
+        'langchain_core.messages',
+        'langchain_openai',
+        'langchain_anthropic',
+        'langchain_community',
+        'langchain_community.chat_models',
         
-        # Additional dependencies
+        # Supabase & Database
+        'supabase',
+        'postgrest',
+        'gotrue',
+        'storage3',
+        'realtime',
+        'base64', # Just in case
+
+        # Execution & Utilities
+        'httpx',
+        'webdriver_manager',
+        'weasyprint',
         'reportlab',
+        'jinja2',
+        'pydantic_core',
         'dotenv',
         'requests',
         'fastapi.staticfiles',
-        'jinja2',
         
         # PIL / Pillow
         'PIL',

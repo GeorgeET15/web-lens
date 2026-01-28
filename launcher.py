@@ -366,7 +366,9 @@ def main() -> int:
         return 1
     
     # Open browser
-    url = f"http://127.0.0.1:{port}"
+    from datetime import datetime
+    version_str = datetime.now().strftime("%Y%m%d%H%M%S")
+    url = f"http://127.0.0.1:{port}?v={version_str}"
     print(f"Opening WebLens in app mode...")
     
     # Try App Mode first for a native feel

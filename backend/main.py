@@ -32,8 +32,14 @@ class CachedStaticFiles(StaticFiles):
     """Custom StaticFiles handler to add Cache-Control headers."""
     async def get_response(self, path: str, scope):
         response = await super().get_response(path, scope)
-        # Add aggressive caching for bundled assets
-        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        # Add aggressive caching for bundled assets, but NOT for HTML or Root
+        is_html = path.endswith(".html") or not path or path == "."
+        if is_html:
+             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+             response.headers["Pragma"] = "no-cache"
+             response.headers["Expires"] = "0"
+        else:
+             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
 
 import config
